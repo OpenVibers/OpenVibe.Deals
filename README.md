@@ -2,9 +2,10 @@
 
 > Deals submitted and voted on by the community, with source, price and freshness always shown.
 
-**Status:** alpha (roadmap Wave 18, Deals). The service runs and its tests pass. It is **not
-deployed**, `openvibe.deals` still shows its placeholder from OpenVibe.Sites, and its capabilities and
-service manifest are proposals that the next openvibe-contracts release has to include.
+**Status:** alpha (roadmap Wave 18, Deals). The service runs and its tests pass. It is **deployed
+internally, not launched**: it runs on the production host on 127.0.0.1:4840 only (release `e72aeec`,
+`/api/ready` 200) with an empty database (0 offers), and `openvibe.deals` still shows its placeholder
+from OpenVibe.Sites. Its capabilities and service manifest are registered in openvibe-contracts v0.23.0.
 **Domain:** `openvibe.deals` · **Port:** 4840 · **Service id:** `deals`
 **Plan:** OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026), §12.9; roadmap §15.13, §29, §32.
 **License:** AGPL-3.0 (same as every OpenVibe service).
@@ -90,8 +91,8 @@ the person in `X-OV-Subject`; browsers or apps with a Network user JWT are judge
 | `GET /watches` · `POST /watches` · `DELETE /watches/:id` | `deals.watch.read` · `deals.watch.create` · `deals.watch.delete` |
 
 The eight charter capabilities are all there; `deals.offer.merge`, `deals.offer.moderate`,
-`deals.watch.read` and `deals.flag.create` are additions (proposals in
-[docs/capabilities-proposal/](docs/capabilities-proposal/), service manifest in
+`deals.watch.read` and `deals.flag.create` are additions (released in openvibe-contracts v0.23.0
+from the proposals in [docs/capabilities-proposal/](docs/capabilities-proposal/) and
 [docs/service-manifest-proposal.json](docs/service-manifest-proposal.json)).
 
 ### Events (SDK outbox, written in the same transaction as the change)
@@ -217,11 +218,11 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
 
 ## Depends on
 
-- **Packages** (pinned release tarballs): `openvibe-publishing` v0.2.0 (seo gate, JSON-LD, feeds,
-  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.19.0, `openvibe-shared` v1.3.0
-  (chrome, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.2.2 (outbox, inbox,
-  webhook signatures, service tokens).
-- **OpenVibe.Network:** SSO (OAuth client `deals` — not yet in Network's seeded client list), JWKS,
+- **Packages** (pinned release tarballs): `openvibe-publishing` v0.2.1 (seo gate, JSON-LD, feeds,
+  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.23.0, `openvibe-shared` v1.3.0
+  (chrome, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.4.0 (outbox, inbox,
+  webhook signatures v2, service tokens).
+- **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
 - **OpenVibe.Sources:** `sources.item.read`; a `deals`-category source must be registered and enabled
   there (the seeded `dealnews-daily` is disabled until a person re-verifies its terms).
@@ -230,7 +231,7 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
   `scripts/subscribe.js`.
 - **OpenVibe.Search:** consumes `deals.index_document.*`; `deals` is already in Search's default
   `SEARCH_EVENT_OWNERS`.
-- **OpenVibe.Network notifications:** a future consumer of `deals.watch.matched`.
+- **OpenVibe.Network notifications:** a future consumer of `deals.watch.matched` (it does not exist yet).
 
 ### Grants the Network must hold
 
@@ -267,10 +268,10 @@ This repository alone doesn't make the product live. `openvibe.deals` keeps its 
 exists. Status against each point:
 
 1. **Runtime, health, readiness, observability:** done (`/api/health`, `/api/ready` with six checks, `/metrics`, `/release.json`).
-2. **Canonical identity and auth:** done in code; the Network still needs the `deals` OAuth client and the grants above.
+2. **Canonical identity and auth:** done; the `deals` OAuth client, service principal and grants exist in production.
 3. **SSR public routes useful without JS:** done.
-4. **Persistence and end-to-end workflows:** done; imports need a registered, enabled deals source in Sources.
-5. **Capability and event registration against OpenVibe.Contracts:** proposals are in `docs/`, waiting on the release.
+4. **Persistence and end-to-end workflows:** done and deployed on the host (loopback only, empty database); imports need a registered, enabled deals source in Sources, and none is enabled.
+5. **Capability and event registration against OpenVibe.Contracts:** done (openvibe-contracts v0.23.0).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. There is nothing to migrate and no seed (below); the threat review is below.
 7. **Acceptance tests:** done.
 
@@ -338,8 +339,8 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4840 (set OV_OAUTH
 5. **systemd:** install `deploy/systemd/openvibe-deals.service` (port 4840, `StateDirectory=openvibe-deals`).
 6. **nginx:** install `deploy/nginx/openvibe.deals.conf`. `/metrics` and `/internal/` are never proxied.
 7. **Events subscription:** `node scripts/subscribe.js` (optional — the importer polls anyway).
-8. **Contracts:** release the capability and manifest proposals in openvibe-contracts. Then CI's
-   contracts check can drop `continue-on-error`.
+8. **Contracts:** done: the capabilities and manifest are released in openvibe-contracts v0.23.0,
+   and CI's contracts check runs against them.
 9. **Launch:** in the same release, remove `openvibe.deals` from OpenVibe.Sites and flip the Network
    hub entry (see the launch rule above).
 

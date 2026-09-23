@@ -14,6 +14,5 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm test
-      # Deals' service manifest and capabilities are proposals (docs/) until the lead releases them in
-      # openvibe-contracts; until then the check reports "capability deals.* is not defined".
+      # Deals' service manifest and capabilities are released in openvibe-contracts (v0.23.0).
       - run: npx openvibe-contracts-check --service deals --src server

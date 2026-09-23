@@ -8,10 +8,10 @@
   "port": 4840,
   "domain": "openvibe.deals",
   "packages": [
-    "openvibe-publishing v0.2.0",
-    "openvibe-contracts v0.19.0",
+    "openvibe-publishing v0.2.1",
+    "openvibe-contracts v0.23.0",
     "openvibe-shared v1.3.0",
-    "openvibe-sdk v0.2.2"
+    "openvibe-sdk v0.4.0"
   ],
   "capabilities": [
     "deals.offer.submit",
@@ -27,12 +27,13 @@
     "deals.product.resolve",
     "deals.flag.create"
   ],
-  "capabilitiesRegistered": false,
-  "serviceManifestRegistered": false,
-  "seedDeals": "none",
-  "sourcesImport": "code and tests; needs the sources.item.read grant and an enabled deals-category source in OpenVibe.Sources",
+  "capabilitiesRegistered": true,
+  "serviceManifestRegistered": true,
+  "seedDeals": "none (production holds 0 offers)",
+  "sourcesImport": "code and tests; the sources.item.read grant exists in production, but no deals-category source is enabled in OpenVibe.Sources (the seeded dealnews-daily is disabled), so nothing has been imported",
   "watchNotifications": "deals.watch.matched events only; OpenVibe.Network's notification consumer does not exist yet",
-  "deployed": false,
+  "deployed": true,
+  "deployment": "openvibe-ovh, unit openvibe-deals, 127.0.0.1:4840 loopback only (release e72aeec); /api/ready 200 with every check ok; Network OAuth client deals and its grants exist; production database holds 0 offers. Deployed internally, not launched: openvibe.deals still serves the OpenVibe.Sites placeholder until a person verifies a deals source's terms and enables it in Sources",
   "placeholderInSites": true,
-  "updated": "2026-09-22"
+  "updated": "2026-09-23"
 }
