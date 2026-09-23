@@ -11,7 +11,7 @@
  */
 const express = require('express');
 const { http } = require('openvibe-contracts');
-const { verifyDelivery, createInbox } = require('openvibe-sdk/events');
+const { verifyDeliveryV2, createInbox } = require('openvibe-sdk/events');
 
 const CONSUMER = 'deals-sources';
 const TYPES = new Set(['sources.item.created', 'sources.item.updated', 'sources.item.removed']);
@@ -25,8 +25,8 @@ function createInternalRoutes({ config, store, importer }) {
         const secrets = config.events.webhookSecrets;
         if (!secrets.length) return http.sendProblem(res, 503, 'deals.webhook_disabled', { detail: 'DEALS_EVENTS_SECRET is not set', ctx: req.ov });
         const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-        const sig = req.get('x-openvibe-signature');
-        if (!secrets.some((s) => verifyDelivery(raw, sig, s))) return http.sendProblem(res, 401, 'deals.bad_signature', { detail: 'X-OpenVibe-Signature does not verify', ctx: req.ov });
+        // v2 only: signature over "<t>.<raw body>" and t within ±300 s (a replayed or v1-only delivery fails).
+        if (!secrets.some((s) => verifyDeliveryV2(raw, req.headers, s))) return http.sendProblem(res, 401, 'deals.bad_signature', { detail: 'X-OpenVibe-Signature-V2 does not verify or is outside the replay window', ctx: req.ov });
         let body;
         try { body = JSON.parse(raw.toString('utf8')); } catch { body = null; }
         const event = body && body.event;

@@ -6,7 +6,7 @@
 const assert = require('assert');
 const { boot, check, done, robotsOf, HOUR } = require('./helpers/boot');
 const { sourceItem } = require('./helpers/mocks');
-const { signDelivery } = require('openvibe-sdk/events');
+const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
 
 (async () => {
     const t = await boot();
@@ -125,17 +125,19 @@ const { signDelivery } = require('openvibe-sdk/events');
         assert.ok(!(await t.get('/feed.xml')).text.includes(garden.slug));
     });
 
-    await check('the signed event wake-up: bad signature 401, deals items scheduled once, others ignored', async () => {
+    await check('the signed event wake-up: bad signature, v1-only and stale v2 401, deals items scheduled once, others ignored', async () => {
         const env = (id, category) => ({ event: { event_id: id, event_type: 'sources.item.updated', source: 'sources', version: 1, timestamp: new Date().toISOString(), actor: { type: 'service', id: 'sources' }, subject: { type: 'item', id: 'itm_x' }, visibility: 'internal', payload: { category } }, seq: 1 });
-        const post = (body, sig) => t.get('/internal/events', { body, headers: { 'content-type': 'application/json', 'x-openvibe-signature': sig } });
+        const post = (body, sig) => t.get('/internal/events', { body, headers: { 'content-type': 'application/json', ...(typeof sig === 'string' ? { 'x-openvibe-signature': sig } : sig) } });
         const good = JSON.stringify(env('evt_01K5AAAAAAAAAAAAAAAAAAAAA1', 'deals'));
         assert.strictEqual((await post(good, 'sha256=00')).status, 401);
-        const r1 = await post(good, signDelivery(good, 'whsec-test'));
+        assert.strictEqual((await post(good, signDelivery(good, 'whsec-test'))).status, 401, 'v1 only: refused');
+        assert.strictEqual((await post(good, signDeliveryHeaders(good, 'whsec-test', { now: Date.now() - 301000 }))).status, 401, 'stale v2: refused');
+        const r1 = await post(good, signDeliveryHeaders(good, 'whsec-test'));
         assert.deepStrictEqual([r1.status, r1.json().outcome, r1.json().duplicate], [200, 'import_scheduled', false]);
-        const r2 = await post(good, signDelivery(good, 'whsec-test'));
+        const r2 = await post(good, signDeliveryHeaders(good, 'whsec-test'));
         assert.strictEqual(r2.json().duplicate, true);
         const news = JSON.stringify(env('evt_01K5AAAAAAAAAAAAAAAAAAAAA2', 'news'));
-        assert.strictEqual((await post(news, signDelivery(news, 'whsec-test'))).json().outcome, 'ignored');
+        assert.strictEqual((await post(news, signDeliveryHeaders(news, 'whsec-test'))).json().outcome, 'ignored');
     });
 
     await check('Sources down: the pull fails honestly (readiness says so), keeps its cursor, invents nothing', async () => {
