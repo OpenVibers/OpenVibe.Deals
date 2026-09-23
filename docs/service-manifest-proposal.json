@@ -1,0 +1,48 @@
+{
+  "version": "0.1.0",
+  "contractRanges": {
+    "openvibe-contracts": ">=0.19.0 <1.0.0"
+  },
+  "id": "deals",
+  "name": "OpenVibe.Deals",
+  "status": "alpha",
+  "repository": "OpenVibers/OpenVibe.Deals",
+  "domains": [
+    "openvibe.deals"
+  ],
+  "publicOrigin": "https://openvibe.deals",
+  "health": "/api/health",
+  "ready": "/api/ready",
+  "capabilities": [
+    "deals.offer.submit",
+    "deals.offer.update",
+    "deals.offer.expire",
+    "deals.offer.merge",
+    "deals.offer.moderate",
+    "deals.vote.set",
+    "deals.vote.remove",
+    "deals.watch.create",
+    "deals.watch.read",
+    "deals.watch.delete",
+    "deals.product.resolve",
+    "deals.flag.create"
+  ],
+  "eventsProduced": [
+    "deals.offer.created",
+    "deals.offer.updated",
+    "deals.offer.expired",
+    "deals.vote.changed",
+    "deals.watch.matched",
+    "deals.index_document.upserted",
+    "deals.index_document.deleted"
+  ],
+  "eventsConsumed": [
+    "sources.item.created",
+    "sources.item.updated",
+    "sources.item.removed"
+  ],
+  "namespacesOwned": [
+    "deals.*"
+  ],
+  "notes": "Port 4840. Owns deal_products, deal_product_aliases, deal_offers, deal_offer_sources, deal_votes, deal_hotness_snapshots, deal_watches, deal_price_observations, deal_flags (+ deal_stores) in its own SQLite. Consumes OpenVibe.Network (SSO, identity.subject.resolve), OpenVibe.Sources (sources.item.read; sources.item.* events only wake the pull), OpenVibe.Community (community.comment.write, community.comment.moderate) and publishes through OpenVibe.Events (events.event.publish); OpenVibe.Search reads deals.index_document.* from Events; deals.watch.matched is for Network notifications (consumer not built yet)."
+}

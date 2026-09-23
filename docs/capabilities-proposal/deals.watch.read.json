@@ -1,0 +1,19 @@
+{
+  "id": "deals.watch.read",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "List the acting person's watches and saved searches with their notification counts.",
+  "permissions": [
+    "deals:watch"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "deals-read",
+  "events": [],
+  "implementedBy": [
+    "GET /api/v1/watches"
+  ]
+}

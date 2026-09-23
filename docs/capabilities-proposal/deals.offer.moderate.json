@@ -1,0 +1,27 @@
+{
+  "id": "deals.offer.moderate",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Moderation: disable or enable an offer, record a person's review of imported or AI-assisted text (reviews are recorded for a usr_ subject only), read and resolve flags including vote-ring flags. Audited.",
+  "permissions": [
+    "deals:moderate"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "deals-moderation",
+  "events": [
+    "deals.offer.updated",
+    "deals.index_document.upserted",
+    "deals.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/offers/:id/disable",
+    "POST /api/v1/offers/:id/enable",
+    "POST /api/v1/offers/:id/review",
+    "GET /api/v1/flags",
+    "POST /api/v1/flags/:id/resolve"
+  ]
+}

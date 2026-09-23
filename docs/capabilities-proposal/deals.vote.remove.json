@@ -1,0 +1,21 @@
+{
+  "id": "deals.vote.remove",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Remove the acting person's vote on an offer (kept as a removed row for history). Same abuse controls as deals.vote.set.",
+  "permissions": [
+    "deals:vote"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "deals-vote",
+  "events": [
+    "deals.vote.changed"
+  ],
+  "implementedBy": [
+    "DELETE /api/v1/offers/:id/vote"
+  ]
+}

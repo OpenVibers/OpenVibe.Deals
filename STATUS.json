@@ -1,7 +1,38 @@
 {
   "repository": "OpenVibers/OpenVibe.Deals",
-  "stage": "placeholder",
-  "code": false,
+  "stage": "alpha",
+  "code": true,
+  "wave": "W18",
   "plan": "OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026)",
-  "updated": "2026-09-21"
+  "runtime": "node 22, express 4, better-sqlite3 11",
+  "port": 4840,
+  "domain": "openvibe.deals",
+  "packages": [
+    "openvibe-publishing v0.2.0",
+    "openvibe-contracts v0.19.0",
+    "openvibe-shared v1.3.0",
+    "openvibe-sdk v0.2.2"
+  ],
+  "capabilities": [
+    "deals.offer.submit",
+    "deals.offer.update",
+    "deals.offer.expire",
+    "deals.offer.merge",
+    "deals.offer.moderate",
+    "deals.vote.set",
+    "deals.vote.remove",
+    "deals.watch.create",
+    "deals.watch.read",
+    "deals.watch.delete",
+    "deals.product.resolve",
+    "deals.flag.create"
+  ],
+  "capabilitiesRegistered": false,
+  "serviceManifestRegistered": false,
+  "seedDeals": "none",
+  "sourcesImport": "code and tests; needs the sources.item.read grant and an enabled deals-category source in OpenVibe.Sources",
+  "watchNotifications": "deals.watch.matched events only; OpenVibe.Network's notification consumer does not exist yet",
+  "deployed": false,
+  "placeholderInSites": true,
+  "updated": "2026-09-22"
 }

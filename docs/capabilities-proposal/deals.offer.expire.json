@@ -1,0 +1,22 @@
+{
+  "id": "deals.offer.expire",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Mark an active offer expired (the person who submitted it, or a moderator). Unknown expiry is never assumed; offers with a stated end expire on their own.",
+  "permissions": [
+    "deals:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "deals-write",
+  "events": [
+    "deals.offer.expired",
+    "deals.index_document.upserted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/offers/:id/expire"
+  ]
+}

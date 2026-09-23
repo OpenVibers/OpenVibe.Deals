@@ -1,0 +1,21 @@
+{
+  "id": "deals.vote.set",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Set the acting person's vote (+1 / -1) on an offer. Server-authoritative: weight and hotness are computed by Deals (hot@1), never taken from the request. Rate-limited per person, per IP hash and per offer; no votes on one's own offer; vote-ring detection flags moderators.",
+  "permissions": [
+    "deals:vote"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "deals-vote",
+  "events": [
+    "deals.vote.changed"
+  ],
+  "implementedBy": [
+    "PUT /api/v1/offers/:id/vote"
+  ]
+}

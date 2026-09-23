@@ -1,0 +1,31 @@
+[Unit]
+Description=OpenVibe.Deals — community deals with timestamped price observations
+# Network (sign-in, JWKS, service tokens), Events (the outbox relay) and Sources (imports) should be up first, but Deals
+# degrades gracefully without them: pages and feeds serve; sign-in, events and imports wait (see /api/ready).
+After=network.target
+Wants=openvibe-network.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/openvibe.deals
+EnvironmentFile=/etc/openvibe/deals.env
+Environment=NODE_ENV=production
+Environment=PORT=4840
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /opt/openvibe.deals/server/index.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Deals' own database lives in /var/lib/openvibe-deals; the code tree stays read-only.
+StateDirectory=openvibe-deals
+Environment=DEALS_DB_PATH=/var/lib/openvibe-deals/deals.db
+
+[Install]
+WantedBy=multi-user.target

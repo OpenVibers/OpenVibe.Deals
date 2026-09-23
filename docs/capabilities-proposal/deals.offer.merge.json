@@ -1,0 +1,24 @@
+{
+  "id": "deals.offer.merge",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Duplicate resolution (moderation): merge an offer into another, or unmerge it. Nothing is copied or deleted: votes, observations, sources and comments stay where they were written and the canonical offer reads across the group (a voter counts once). Audited with the tallies before and after; reversible.",
+  "permissions": [
+    "deals:moderate"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "deals-moderation",
+  "events": [
+    "deals.offer.updated",
+    "deals.index_document.upserted",
+    "deals.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/offers/:id/merge",
+    "POST /api/v1/offers/:id/unmerge"
+  ]
+}

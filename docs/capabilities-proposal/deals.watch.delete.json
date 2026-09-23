@@ -1,0 +1,19 @@
+{
+  "id": "deals.watch.delete",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Delete one of the acting person's watches or saved searches.",
+  "permissions": [
+    "deals:watch"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "deals-write",
+  "events": [],
+  "implementedBy": [
+    "DELETE /api/v1/watches/:id"
+  ]
+}

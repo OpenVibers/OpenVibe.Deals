@@ -1,0 +1,21 @@
+{
+  "id": "deals.product.resolve",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Resolve a product by its aliases (gtin, mpn, sku, exact name, url), creating it when none matches (create: false to only look up). Aliases that already name another product are reported as conflicts, never re-pointed.",
+  "permissions": [
+    "deals:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "deals-write",
+  "events": [
+    "deals.index_document.upserted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/products/resolve"
+  ]
+}

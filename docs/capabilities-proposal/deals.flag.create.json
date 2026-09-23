@@ -1,0 +1,19 @@
+{
+  "id": "deals.flag.create",
+  "version": "1.0",
+  "owner": "deals",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Report a problem with an offer for the acting person (expired, price_wrong, duplicate, spam, other). One open report per person and offer; rate-limited. Flags never change an offer by themselves.",
+  "permissions": [
+    "deals:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "deals-write",
+  "events": [],
+  "implementedBy": [
+    "POST /api/v1/offers/:id/flags"
+  ]
+}
