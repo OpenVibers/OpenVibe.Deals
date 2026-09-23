@@ -122,6 +122,25 @@ const { sourceItem } = require('./helpers/mocks');
         assert.strictEqual(denied.status, 403);
     });
 
+    await check('API: an app or module token reads and changes watches only for its on_behalf_of person; sandbox tokens are refused', async () => {
+        const app = (sub, actorType, extra) => t.network.signService({ sub, actorType, aud: ['openvibe.deals'], cap: ['deals.watch.read', 'deals.watch.create', 'deals.watch.delete'], extra });
+        for (const [sub, type] of [['app:app_01J8ZQ4Y7N3M2K1H0G9F8E7D6C', 'app'], ['mod:mod_01J8ZQ4Y7N3M2K1H0G9F8E7D6C', 'mod']]) {
+            const token = app(sub, type, { on_behalf_of: other.subject });
+            const spy = await t.get('/api/v1/watches', { as: token, headers: { 'X-OV-Subject': watcher.subject } });
+            assert.strictEqual(spy.status, 403, `${type}: ${spy.text}`);
+            assert.strictEqual(spy.json().code, 'subject.not_delegated');
+            assert.strictEqual((await t.get(`/api/v1/watches/${w.price}`, { as: token, method: 'DELETE', headers: { 'X-OV-Subject': watcher.subject } })).status, 403);
+            assert.strictEqual((await t.get('/api/v1/watches', { as: app(sub, type, {}), headers: { 'X-OV-Subject': watcher.subject } })).status, 403, 'no on_behalf_of: nobody');
+            const own = await t.get('/api/v1/watches', { as: token });
+            assert.strictEqual(own.status, 200, 'without the header it acts for on_behalf_of');
+            assert.deepStrictEqual(own.json().watches, []);
+        }
+        const sandbox = await t.get('/api/v1/watches', { as: app('app:app_01J8ZQ4Y7N3M2K1H0G9F8E7D6C', 'app', { on_behalf_of: other.subject, env: 'sandbox' }) });
+        assert.strictEqual(sandbox.status, 401);
+        assert.strictEqual(sandbox.json().code, 'token.sandbox_refused');
+        assert.strictEqual(t.ctx.watches.list(watcher.subject).length, 2, 'the watcher\'s watches are untouched');
+    });
+
     await t.close();
     done();
 })();

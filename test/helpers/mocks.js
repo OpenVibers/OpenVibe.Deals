@@ -65,8 +65,8 @@ async function startNetwork() {
         return json(404, { error: 'not found' });
     });
     issuer = srv.url;
-    function signService({ sub, aud, cap, ns }) {
-        return serviceAuth.signServiceToken({ iss: issuer, sub, actor_type: 'service', aud, cap, ...(ns ? { ns } : {}), iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300, jti: crypto.randomUUID() }, privatePem);
+    function signService({ sub, aud, cap, ns, actorType = 'service', extra = {} }) {
+        return serviceAuth.signServiceToken({ iss: issuer, sub, actor_type: actorType, aud, cap, ...(ns ? { ns } : {}), iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300, jti: crypto.randomUUID(), ...extra }, privatePem);
     }
     /** extra.mintedAt: the time embedded in the usr_ ULID (default: long ago, i.e. an established account). */
     function addUser(username, extra = {}) {
