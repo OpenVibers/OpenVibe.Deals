@@ -69,7 +69,15 @@ function createApi(ctx) {
         return { sort: req.query.sort === 'new' ? 'new' : 'hot', page, total: listings.countActive(), offers: rows.map((o) => publication.offerDto(publication.offerView(o))) };
     }));
 
-    router.get('/offers/:id', run((req) => offerOut(reads.mustFind(req.params.id))));
+    // A removed deal answers like its page (410, reason only); moderators still read the whole record.
+    router.get('/offers/:id', run((req) => {
+        const offer = reads.mustFind(req.params.id);
+        const root = reads.root(offer);
+        if (root.status === 'disabled' && !access.isModerator(req.viewer)) {
+            throw new ApiError(410, 'offer.disabled', 'This deal was removed by moderators', { id: root.id, slug: root.slug, status: 'disabled', reason: root.disabled_reason });
+        }
+        return offerOut(offer);
+    }));
 
     router.get('/offers/:id/hotness', run((req) => {
         const root = reads.root(reads.mustFind(req.params.id));

@@ -129,6 +129,12 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.strictEqual(thread.visibility, 'hidden', 'the disabled deal\'s discussion is hidden too');
         assert.strictEqual((await t.get(`/d/${target.slug}`)).status, 410);
         assert.strictEqual((await t.get(`/d/${target.slug}.json`)).status, 410);
+        for (const id of [target.id, target.slug]) {
+            const api = await t.get(`/api/v1/offers/${id}`);
+            assert.strictEqual(api.status, 410, 'the API does not serve a removed deal either');
+            assert.ok(!api.text.includes('Drone Pro'), 'no title, description or link of a removed deal');
+        }
+        assert.strictEqual((await t.get(`/api/v1/offers/${target.id}`, { as: t.mod })).status, 200, 'moderators still read it');
         assert.ok(!(await t.get('/feed.xml')).text.includes(target.slug));
         assert.ok(t.events('deals.index_document.deleted').some((e) => e.payload.id === target.id));
         const en = await t.get(`/mod/offers/${target.slug}/enable`, { as: t.mod, form: {} });
