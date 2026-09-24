@@ -145,10 +145,15 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 q.bumpSource.run(Math.max(item.revision, existing.ref_revision || 0), Math.max(retrievedAt, existing.retrieved_at || 0), item.title, store.now(), existing.id);
                 const obs = offers.recordObservation(existing.offer_id, existing.id, c.obs, { origin, observedAt: retrievedAt, sourceRevision: item.revision });
                 const offer = reads.get(existing.offer_id);
+                const changed = ['observation'];
                 if (origin === 'import' && c.expires_at && offer.status === 'active' && offer.origin === 'import' && c.expires_at !== offer.expires_at) {
                     db.prepare('UPDATE deal_offers SET expires_at = ?, updated_at = ? WHERE id = ?').run(c.expires_at, store.now(), offer.id);
+                    changed.push('expires_at');
                 }
-                indexing.emitOffer('deals.offer.updated', reads.get(offer.id), { actor: 'svc:deals', extra: { changed: ['observation'], observation_id: obs.id } });
+                // Anything else the observation moved on the offer (price, product) is named too, so consumers never miss a field.
+                const after = reads.get(offer.id);
+                for (const k of ['product_id', 'title', 'status']) if (after && offer && after[k] !== offer[k] && !changed.includes(k)) changed.push(k);
+                indexing.emitOffer('deals.offer.updated', after, { actor: 'svc:deals', extra: { changed, observation_id: obs.id } });
                 indexing.reindex(reads.get(offer.id));
                 outcomes.push(origin === 'import' ? 'updated' : 'refreshed');
                 continue;
