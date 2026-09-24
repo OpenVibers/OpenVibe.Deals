@@ -9,6 +9,7 @@
  *     <noscript> navigation bar and the server-rendered shared footer (openvibe-shared)
  */
 const crypto = require('crypto');
+const ovServe = require('openvibe-shared/serve');
 const fs = require('fs');
 const path = require('path');
 const seo = require('openvibe-publishing/seo');
@@ -82,9 +83,9 @@ ${head}
 ${seo.feedLinks(o.feeds || [])}
 ${appIcon.headTags({ site: 'deals' })}
 <link rel="stylesheet" href="${asset('css/deals.css')}">
-<script src="${NETWORK_URL}/shared/theme-loader.js" defer></script>
-<script src="${NETWORK_URL}/shared/navbar.js" defer></script>
-<script src="${NETWORK_URL}/shared/footer.js" defer></script>
+<script src="${ovServe.url('theme-loader.js')}" defer></script>
+<script src="${ovServe.url('navbar.js')}" defer></script>
+<script src="${ovServe.url('footer.js')}" defer></script>
 </head>
 <body class="${esc(o.bodyClass || '')}">
 <a class="skip" href="#main">Skip to content</a>

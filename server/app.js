@@ -122,6 +122,8 @@ function createApp(opts = {}) {
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'deals', service: 'deals', host: 'openvibe.deals', name: 'OpenVibe.Deals', profile: 'ugc' })); }
 
     // ── Static assets (content-hashed ?v= → immutable) ──────
+    // This site's own pinned copy of the OpenVibe Frame's browser files (openvibe-shared/serve).
+    app.use('/shared', require('openvibe-shared/serve').handler());
     app.use(express.static(PUBLIC_DIR, {
         index: false, redirect: false,
         setHeaders(res, filePath) {
