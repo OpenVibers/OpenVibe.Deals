@@ -3,7 +3,7 @@
 /**
  * Who may do what (the domain's decisions; routes only check capabilities of service tokens).
  *
- *   moderators   Network role admin or global_mod, or a subject listed in DEALS_MODERATORS; a
+ *   moderators   staff with staff.content.moderate (the contracts staff map), or a subject in DEALS_MODERATORS; a
  *                service token is a moderator only for the moderation capability it holds
  *                (deals.offer.moderate / deals.offer.merge) — the grant is the decision
  *   editors      the person who submitted an offer (or a service acting for them), and moderators

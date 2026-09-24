@@ -49,7 +49,7 @@ function load(env = process.env) {
         // random per-process key (hashes are then not comparable across restarts; /api/ready says so).
         ipHashSecret: env.DEALS_IP_HASH_SECRET || '',
 
-        // Moderators besides Network admins and global mods: usr_… subjects, comma-separated.
+        // Moderators besides staff with staff.content.moderate: usr_… subjects, comma-separated (a product role).
         moderators: list(env.DEALS_MODERATORS),
 
         // Freshness: an observation older than this is shown as stale, never as the price now.

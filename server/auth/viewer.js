@@ -6,7 +6,7 @@
  *   { kind: 'anonymous', subject: null, staff: false }
  *   { kind: 'user', subject: 'usr_…'|null, staff, user, token }
  *       A browser with the Network user JWT (ov_token cookie or Bearer). The subject comes from the
- *       token's subject_id claim. Role admin or global_mod, or a subject in DEALS_MODERATORS, makes
+ *       token's subject_id claim. staff.content.moderate (the contracts staff map), or a subject in DEALS_MODERATORS, makes
  *       the viewer a moderator (staff). X-OV-* headers are ignored for browsers.
  *   { kind: 'service', service: 'svc:ai', claims, subject: 'usr_…'|null, origin: 'user'|'ai' }
  *       A first-party service with a Network client-credentials token for audience openvibe.deals.
@@ -20,8 +20,7 @@ const contracts = require('openvibe-contracts');
 const { extractToken, claimsToUser, decodeJwtPayload } = require('./sso');
 const { checkCapability } = require('./capabilities');
 
-const { ids, serviceAuth, http } = contracts;
-const STAFF_ROLES = new Set(['admin', 'global_mod']);
+const { ids, serviceAuth, http, staff: staffMap } = contracts;
 const PRINCIPAL_SUB = /^(svc|app|mod):/;
 const AUDIENCE = 'openvibe.deals';
 
@@ -68,7 +67,8 @@ function createViewerResolver({ auth, config, people }) {
         if (!claims || (typeof claims.sub === 'string' && PRINCIPAL_SUB.test(claims.sub))) return null;
         const subject = ids.isSubjectId('user', claims.subject_id) ? claims.subject_id : null;
         if (subject && people) { try { people.rememberClaims(subject, claims); } catch { /* display cache only */ } }
-        const staff = STAFF_ROLES.has(claims.role) || Boolean(subject && moderators.has(subject));
+        // Staff = the contracts staff map's staff.content.moderate (ADR-022), or one of this product's own moderators.
+        const staff = staffMap.can(claims, 'staff.content.moderate') || Boolean(subject && moderators.has(subject));
         return { kind: 'user', subject, staff, origin: 'user', user: claimsToUser(claims), token };
     }
 
@@ -117,4 +117,4 @@ function guard(cap) {
     };
 }
 
-module.exports = { createViewerResolver, guard, ANONYMOUS, ViewerError, STAFF_ROLES };
+module.exports = { createViewerResolver, guard, ANONYMOUS, ViewerError };
