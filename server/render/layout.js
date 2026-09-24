@@ -5,7 +5,7 @@
  *   - <head>: title, description, canonical and robots from the indexability gate's decision
  *     (openvibe-publishing/seo metaTags — there is no default that makes a page indexable),
  *     Open Graph/Twitter, JSON-LD, feed links, the shared app icon and critical canvas
- *   - the shared chrome: navbar.js and theme-loader.js from the Network (progressive), a
+ *   - the OpenVibe Frame: navbar.js and theme-loader.js from the Network (progressive), a
  *     <noscript> navigation bar and the server-rendered shared footer (openvibe-shared)
  */
 const crypto = require('crypto');
@@ -14,7 +14,7 @@ const path = require('path');
 const seo = require('openvibe-publishing/seo');
 const { escapeHtml: esc } = require('openvibe-publishing/ssr');
 const appIcon = require('openvibe-shared/app-icon');
-const chrome = require('openvibe-shared/chrome-ssr');
+const frame = require('openvibe-shared/frame');
 
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.Deals';
@@ -64,7 +64,12 @@ function renderPage(o) {
         silentLogin: `${o.config.baseUrl}/auth/login?silent=1&next={url}`,
         sessionUrl: '/auth/me',
         loginUrl: `/auth/login?next=${loginNext}`,
+        logoutUrl: '/auth/logout?next={path}',   // Sign out in the shared navbar ends this site's session too
     };
+    // This site's own account links live in the shared navbar's account menu (the page's account
+    // bar below is only for visitors without JavaScript).
+    if (signedIn) nav.menu = { before: (viewer.staff ? [{ label: 'Moderation', href: '/mod', icon: 'fa-shield' }] : []) };
+    const footer = { service: 'deals', variant: 'full', mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };
     const account = signedIn
         ? `${viewer.staff ? '<a href="/mod">Moderation</a> · ' : ''}<a href="/watches">Watches</a> · <a href="/auth/logout?next=${loginNext}">Sign out</a>`
         : `<a href="/auth/login?next=${loginNext}">Sign in with OpenVibe</a>`;
@@ -79,20 +84,23 @@ ${appIcon.headTags({ site: 'deals' })}
 <link rel="stylesheet" href="${asset('css/deals.css')}">
 <script src="${NETWORK_URL}/shared/theme-loader.js" defer></script>
 <script src="${NETWORK_URL}/shared/navbar.js" defer></script>
+<script src="${NETWORK_URL}/shared/footer.js" defer></script>
 </head>
 <body class="${esc(o.bodyClass || '')}">
 <a class="skip" href="#main">Skip to content</a>
 <div id="navbar-mount"></div>
-${chrome.noscriptNav({ name: SITE_NAME, home: '/', links: [{ label: 'Hot', href: '/' }, { label: 'New', href: '/new' }, { label: 'Submit', href: '/submit' }, { label: 'Watches', href: '/watches' }] })}
-<div class="account-bar" role="navigation" aria-label="Account">${account}</div>
+${frame.noscriptNav({ name: SITE_NAME, home: '/', links: [{ label: 'Hot', href: '/' }, { label: 'New', href: '/new' }, { label: 'Submit', href: '/submit' }, { label: 'Watches', href: '/watches' }] })}
+<noscript><div class="account-bar" role="navigation" aria-label="Account">${account}</div></noscript>
 <main id="main" class="page">
 ${o.body || ''}
+${o.path === '/' ? frame.shipped({ service: 'deals', title: `Recently shipped on ${SITE_NAME}` }) : ''}
 </main>
-${chrome.footer({ service: 'deals', variant: 'full' })}
+${frame.footer(footer)}
 <script>
-window.__OV_PAGE = ${JSON.stringify({ navbar: nav }).replace(/</g, '\\u003c')};
+window.__OV_PAGE = ${JSON.stringify({ navbar: nav, footer }).replace(/</g, '\\u003c')};
 document.addEventListener('DOMContentLoaded', function () {
-  try { if (window.OpenVibeNavbar) OpenVibeNavbar.init(window.__OV_PAGE.navbar); } catch (e) { /* the chrome is optional */ }
+  try { if (window.OpenVibeNavbar) OpenVibeNavbar.init(window.__OV_PAGE.navbar); } catch (e) { /* the Frame is optional */ }
+  try { if (window.OpenVibeFooter) OpenVibeFooter.init(window.__OV_PAGE.footer); } catch (e) { /* */ }
 });
 </script>
 </body>

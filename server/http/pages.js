@@ -21,6 +21,7 @@
  * is `private, no-store`. Pages vary on Cookie and Authorization.
  */
 const express = require('express');
+const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const { renderPage } = require('../render/layout');
@@ -128,6 +129,12 @@ function createPages(ctx) {
     }
 
     router.get('/', wrap(async (req, res) => listPage(req, res, 'hot')));
+    // What shipped on OpenVibe.Deals: the shared update log every OpenVibe site has.
+    router.get('/updates', (req, res) => send(req, res, 200, {
+        title: 'What shipped on OpenVibe.Deals', description: 'Every change deployed to OpenVibe.Deals, newest first.',
+        decision: pageDecision('/updates'), canonical: `${config.baseUrl}/updates`,
+        body: frame.updatesBody({ service: 'deals', siteName: 'OpenVibe.Deals' }) + frame.shippedScript(),
+    }, { cacheable: true }));
     router.get('/new', wrap(async (req, res) => listPage(req, res, 'new')));
 
     // ── offers ──────────────────────────────────────────────
