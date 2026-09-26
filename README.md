@@ -104,6 +104,7 @@ from the proposals in [docs/capabilities-proposal/](docs/capabilities-proposal/)
 | `deals.offer.expired` | submitter, moderator or stated end time | internal once expired |
 | `deals.vote.changed` | a person's effective vote changed (payload: counts and hotness) | internal |
 | `deals.watch.matched` | a watch matched a new observation (payload: `recipient`, offer, observation) — for Network's notification consumer, which does not exist yet | internal |
+| `deals.moderation.action` | a moderator edited, expired, disabled, enabled, reviewed, merged or unmerged someone else's offer (`offer.*`), or resolved or dismissed a report (`flag.*`); for the network's moderation audit log (ADR-022, `common.moderation-action@1`), never the text | internal |
 | `deals.index_document.upserted\|deleted` | the OpenVibe.Search document (`search.index-document@1`) or tombstone for offers and products | internal |
 
 Consumed: `sources.item.created|updated|removed` at `POST /internal/events` (signed,

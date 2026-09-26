@@ -400,7 +400,7 @@ function createPages(ctx) {
         await act(req, res, '/mod', () => {
             const status = { resolve: 'resolved', dismiss: 'dismissed' }[req.params.action];
             if (!status) throw new ApiError(404, 'route.not_found', 'No such action');
-            flags.resolve(req.viewer, req.params.id, { status, resolution: req.body.resolution });
+            flags.resolve(req.viewer, req.params.id, { status, resolution: req.body.resolution }, { traceparent: req.ov && req.ov.traceparent });
             return '/mod';
         });
     }));

@@ -8,6 +8,10 @@
  *   deals.vote.changed                   a person's effective vote changed (payload: counts, not identities)
  *   deals.watch.matched                  a watch matched a new observation (internal; Network's
  *                                        notification consumer is future work; Deals never emails)
+ *   deals.moderation.action              a moderator acted on someone else's offer or a report: edit,
+ *                                        expire, disable, enable, review, merge, unmerge, flag
+ *                                        resolution (common.moderation-action@1, ADR-022), for
+ *                                        Network's moderation audit log
  *   deals.index_document.upserted|deleted the OpenVibe.Search document or tombstone (index-hooks
  *                                        indexEvent), consumed by Search's '*.index_document.*'
  *                                        subscription
@@ -52,8 +56,24 @@ function createDealsOutbox({ db, config, fetchImpl, now, log = console }) {
         return outbox.enqueue(envelope, { traceparent });
     }
 
+    /**
+     * deals.moderation.action, inside the caller's transaction. actorSubject: the moderator (null for
+     * a service acting without a person); target: { type, id, owner_subject? }. Never the content.
+     */
+    function moderationAction({ action, target, actorSubject, reason = null, details = {} }, { traceparent } = {}) {
+        const t = { type: target.type, id: String(target.id).slice(0, 200), owner_subject: target.owner_subject || null };
+        return emit({
+            event_type: 'deals.moderation.action',
+            actor: actorSubject ? { type: 'user', id: actorSubject } : { type: 'service', id: 'deals' },
+            subject: { type: 'moderation_action', id: `${t.type}:${t.id}`.slice(0, 200) },
+            visibility: 'internal',
+            payload: { action, target: t, actor_subject: actorSubject || null, reason: reason ? String(reason).slice(0, 500) : null, details: details || {} },
+        }, { traceparent });
+    }
+
     return {
         emit,
+        moderationAction,
         outbox,
         enabled,
         start() { if (enabled) outbox.start(); },

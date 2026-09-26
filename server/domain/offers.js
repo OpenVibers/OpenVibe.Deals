@@ -28,7 +28,7 @@ function actorOf(viewer) {
 }
 
 function createOffers(deps) {
-    const { config, store, reads, catalog, publication, indexing, hotness, watches, limits, access, community = null } = deps;
+    const { config, store, reads, catalog, publication, indexing, hotness, watches, limits, access, community = null, outbox = null } = deps;
     const { db } = store;
     const q = {
         byUrl: db.prepare("SELECT * FROM deal_offers WHERE url_norm = ? AND status <> 'disabled' ORDER BY created_at LIMIT 1"),
@@ -68,6 +68,18 @@ function createOffers(deps) {
             availability: parseEnum(input.availability, AVAILABILITY, 'availability'),
             note: text(input.note, { field: 'note', max: 300 }),
         };
+    }
+
+    /**
+     * A moderator acting on an offer someone else submitted (or an import) is moderation: it also goes
+     * to Network's moderation audit log (ADR-022), in the caller's transaction. The submitter (or a
+     * service acting for them) acting on their own offer, and AI text deliveries, are not.
+     */
+    function moderated(viewer, root, action, { reason = null, details = {}, traceparent } = {}) {
+        if (!outbox || !viewer || (viewer.kind === 'service' && viewer.origin === 'ai')) return null;
+        if (viewer.subject && viewer.subject === root.submitted_by) return null;
+        const person = viewer.subject && /^usr_/.test(viewer.subject) ? viewer.subject : null;
+        return outbox.moderationAction({ action, target: { type: 'offer', id: root.id, owner_subject: root.submitted_by || null }, actorSubject: person, reason, details }, { traceparent });
     }
 
     function logAction(action, { offerId = null, targetId = null, actor, reason = null, before = null, after = null }) {
@@ -219,6 +231,7 @@ function createOffers(deps) {
             db.prepare(`UPDATE deal_offers SET ${keys.map((k) => `${k} = @${k}`).join(', ')}, updated_at = @now WHERE id = @id`).run({ ...changes, now: store.now(), id: root.id });
             const after = reads.get(root.id);
             indexing.emitOffer('deals.offer.updated', after, { actor, extra: { changed: keys }, traceparent });
+            moderated(viewer, root, 'offer.edited', { details: { changed: keys }, traceparent });
             indexing.reindex(after);
             if (oldProduct && oldProduct !== after.product_id) indexing.indexProduct(catalog.product(oldProduct));
             return { offer: after, changed: true };
@@ -267,7 +280,11 @@ function createOffers(deps) {
         if (!access.canEdit(viewer, root)) throw new ApiError(403, 'offer.forbidden', 'Only the person who submitted this deal or a moderator can mark it expired');
         if (root.status !== 'active') throw new ApiError(409, 'offer.not_active', `This deal is ${root.status}`);
         const why = access.isStaff(viewer) ? `moderator${reason ? `: ${text(reason, { max: 200 })}` : ''}` : 'submitter';
-        return store.tx(() => expireRow(root, { actor: actorOf(viewer), reason: why, traceparent }));
+        return store.tx(() => {
+            const after = expireRow(root, { actor: actorOf(viewer), reason: why, traceparent });
+            moderated(viewer, root, 'offer.expired', { reason: text(reason, { max: 200 }) || null, traceparent });
+            return after;
+        });
     }
 
     /** Worker: offers whose STATED expiry has passed. Unknown expiry is never assumed. */
@@ -290,6 +307,7 @@ function createOffers(deps) {
             const now = store.now();
             db.prepare("UPDATE deal_offers SET status = 'disabled', disabled_at = ?, disabled_reason = ?, disabled_by = ?, updated_at = ? WHERE id = ?").run(now, why, actorOf(viewer), now, root.id);
             logAction('disable', { offerId: root.id, actor: actorOf(viewer), reason: why, before: { status: root.status }, after: { status: 'disabled' } });
+            moderated(viewer, root, 'offer.disabled', { reason: why, details: { previous: root.status }, traceparent });
             const after = reads.get(root.id);
             indexing.emitOffer('deals.offer.updated', after, { actor: actorOf(viewer), extra: { changed: ['status'], moderation: 'disabled' }, traceparent });
             indexing.reindex(after);
@@ -315,6 +333,7 @@ function createOffers(deps) {
             db.prepare(`UPDATE deal_offers SET status = 'active', disabled_at = NULL, disabled_reason = NULL, disabled_by = NULL,
                         expired_at = NULL, expired_reason = NULL, expires_at = ?, updated_at = ? WHERE id = ?`).run(keepExpiry, now, root.id);
             logAction('enable', { offerId: root.id, actor: actorOf(viewer), reason: text(reason, { max: 300 }), before: { status: root.status, disabled_reason: root.disabled_reason, expired_reason: root.expired_reason, expires_at: root.expires_at }, after: { status: 'active', expires_at: keepExpiry } });
+            moderated(viewer, root, 'offer.enabled', { reason: text(reason, { max: 300 }) || null, details: { previous: root.status }, traceparent });
             const after = reads.get(root.id);
             indexing.emitOffer('deals.offer.updated', after, { actor: actorOf(viewer), extra: { changed: ['status'], moderation: 'enabled' }, traceparent });
             indexing.reindex(after);
@@ -335,6 +354,7 @@ function createOffers(deps) {
             const now = store.now();
             db.prepare("UPDATE deal_offers SET review_state = 'reviewed', reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE id = ?").run(reviewer, now, now, root.id);
             logAction('review', { offerId: root.id, actor: reviewer, reason: text(note, { max: 300 }), before: { review_state: 'pending' }, after: { review_state: 'reviewed' } });
+            moderated(viewer, root, 'offer.reviewed', { reason: text(note, { max: 300 }) || null, traceparent });
             const after = reads.get(root.id);
             indexing.emitOffer('deals.offer.updated', after, { actor: reviewer, extra: { changed: ['review_state'] }, traceparent });
             indexing.reindex(after);
@@ -355,6 +375,7 @@ function createOffers(deps) {
             db.prepare('UPDATE deal_offers SET merged_into = ?, merged_at = ?, merged_by = ?, updated_at = ? WHERE id = ?').run(target.id, now, actor, now, dup.id);
             const after = { target: tallies(target) };
             logAction('merge', { offerId: dup.id, targetId: target.id, actor, reason: text(reason, { max: 300 }), before, after });
+            moderated(viewer, dup, 'offer.merged', { reason: text(reason, { max: 300 }) || null, details: { into: target.id }, traceparent });
             hotness.snapshot(target.id, 'merge');
             indexing.emitOffer('deals.offer.updated', target, { actor, extra: { changed: ['merged'], merged_offer_id: dup.id }, traceparent });
             indexing.indexOffer(reads.get(dup.id));
@@ -377,6 +398,7 @@ function createOffers(deps) {
             const restored = reads.get(dup.id);
             const after = { target: tallies(parentRoot), duplicate: tallies(restored) };
             logAction('unmerge', { offerId: dup.id, targetId: parentRoot.id, actor, reason: text(reason, { max: 300 }), before, after });
+            moderated(viewer, dup, 'offer.unmerged', { reason: text(reason, { max: 300 }) || null, details: { from: parentRoot.id }, traceparent });
             hotness.snapshot(parentRoot.id, 'unmerge');
             hotness.snapshot(restored.id, 'unmerge');
             indexing.emitOffer('deals.offer.updated', parentRoot, { actor, extra: { changed: ['unmerged'], unmerged_offer_id: dup.id }, traceparent });

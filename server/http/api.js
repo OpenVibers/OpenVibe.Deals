@@ -148,7 +148,7 @@ function createApi(ctx) {
     }));
 
     router.post('/flags/:id/resolve', guard('deals.offer.moderate'), jsonBody, run((req) => {
-        const r = flags.resolve(req.viewer, req.params.id, req.body || {});
+        const r = flags.resolve(req.viewer, req.params.id, req.body || {}, opts(req));
         return { flag: flags.dto(r.flag), changed: r.changed };
     }));
 

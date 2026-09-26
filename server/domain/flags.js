@@ -11,7 +11,7 @@ const { ApiError, newId, text, iso } = require('./util');
 
 const USER_KINDS = ['expired', 'price_wrong', 'spam', 'duplicate', 'other'];
 
-function createFlags({ config, store, reads, limits, access, publication, logAction }) {
+function createFlags({ config, store, reads, limits, access, publication, logAction, outbox = null }) {
     const { db } = store;
     const q = {
         get: db.prepare('SELECT * FROM deal_flags WHERE id = ?'),
@@ -63,7 +63,7 @@ function createFlags({ config, store, reads, limits, access, publication, logAct
         return { flag: q.get.get(id), created: true };
     }
 
-    function resolve(viewer, flagId, { status = 'resolved', resolution } = {}) {
+    function resolve(viewer, flagId, { status = 'resolved', resolution } = {}, { traceparent } = {}) {
         if (!access.isModerator(viewer, 'deals.offer.moderate')) throw new ApiError(403, 'moderation.forbidden', 'Moderators only');
         if (!['resolved', 'dismissed'].includes(status)) throw new ApiError(422, 'request.invalid', 'status must be resolved or dismissed');
         const f = q.get.get(String(flagId || ''));
@@ -73,6 +73,14 @@ function createFlags({ config, store, reads, limits, access, publication, logAct
         return store.tx(() => {
             q.resolve.run(status, actor, store.now(), text(resolution, { max: 300 }), store.now(), f.id);
             logAction(`flag.${status === 'resolved' ? 'resolve' : 'dismiss'}`, { offerId: f.offer_id, actor, reason: resolution || null, before: { flag: f.id, status: 'open' }, after: { status } });
+            // A moderator's decision on a report goes to Network's moderation audit log (ADR-022).
+            if (outbox) {
+                const person = viewer.subject && /^usr_/.test(viewer.subject) ? viewer.subject : null;
+                outbox.moderationAction({
+                    action: `flag.${status}`, target: { type: 'flag', id: f.id, owner_subject: f.reporter || null }, actorSubject: person,
+                    reason: text(resolution, { max: 300 }) || null, details: { offer_id: f.offer_id, kind: f.kind, origin: f.origin },
+                }, { traceparent });
+            }
             return { flag: q.get.get(f.id), changed: true };
         });
     }
