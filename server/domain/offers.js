@@ -47,7 +47,7 @@ function createOffers(deps) {
                                    @shipping_num, @shipping_note, @condition, @availability, @origin, @observed_by, @source_revision, @note)`),
         obs: db.prepare('SELECT * FROM deal_price_observations WHERE id = ?'),
         log: db.prepare('INSERT INTO moderation_log (action, offer_id, target_id, actor, reason, before, after, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
-        logFor: db.prepare(`SELECT * FROM moderation_log WHERE offer_id IN (SELECT value FROM json_each(?)) OR target_id IN (SELECT value FROM json_each(?)) ORDER BY id`),
+        logFor: db.prepare(`SELECT * FROM moderation_log WHERE offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) OR target_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) ORDER BY id`),
         dueExpiry: db.prepare("SELECT * FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND expires_at IS NOT NULL AND expires_at <= ?"),
     };
 
@@ -75,32 +75,32 @@ function createOffers(deps) {
      * to Network's moderation audit log (ADR-022), in the caller's transaction. The submitter (or a
      * service acting for them) acting on their own offer, and AI text deliveries, are not.
      */
-    function moderated(viewer, root, action, { reason = null, details = {}, traceparent } = {}) {
+    async function moderated(viewer, root, action, { reason = null, details = {}, traceparent } = {}) {
         if (!outbox || !viewer || (viewer.kind === 'service' && viewer.origin === 'ai')) return null;
         if (viewer.subject && viewer.subject === root.submitted_by) return null;
         const person = viewer.subject && /^usr_/.test(viewer.subject) ? viewer.subject : null;
-        return outbox.moderationAction({ action, target: { type: 'offer', id: root.id, owner_subject: root.submitted_by || null }, actorSubject: person, reason, details }, { traceparent });
+        return await outbox.moderationAction({ action, target: { type: 'offer', id: root.id, owner_subject: root.submitted_by || null }, actorSubject: person, reason, details }, { traceparent });
     }
 
-    function logAction(action, { offerId = null, targetId = null, actor, reason = null, before = null, after = null }) {
-        q.log.run(action, offerId, targetId, actor || 'svc:deals', reason, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, store.now());
+    async function logAction(action, { offerId = null, targetId = null, actor, reason = null, before = null, after = null }) {
+        await q.log.run(action, offerId, targetId, actor || 'svc:deals', reason, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, store.now());
     }
 
-    function ensureSource(offerId, s) {
+    async function ensureSource(offerId, s) {
         const part = s.ref_part || '';
-        const existing = q.sourceByRef.get(s.kind, s.ref_service, s.ref_id, part);
+        const existing = await q.sourceByRef.get(s.kind, s.ref_service, s.ref_id, part);
         if (existing) return existing;
         const row = {
             id: newId('dos'), offer_id: offerId, kind: s.kind, ref_service: s.ref_service, ref_type: s.ref_type, ref_id: s.ref_id, ref_part: part,
             ref_revision: s.ref_revision == null ? null : s.ref_revision, source_key: s.source_key || null, url: s.url || null, label: s.label || null,
             license_note: s.license_note || null, submitted_by: s.submitted_by || null, retrieved_at: s.retrieved_at == null ? null : s.retrieved_at, now: store.now(),
         };
-        q.insertSource.run(row);
-        return q.sourceByRef.get(s.kind, s.ref_service, s.ref_id, part);
+        await q.insertSource.run(row);
+        return await q.sourceByRef.get(s.kind, s.ref_service, s.ref_id, part);
     }
 
     /** Insert one observation and run the watch matcher. Inside the caller's transaction. */
-    function recordObservation(offerId, sourceId, fields, { origin, observedBy = null, observedAt, sourceRevision = null }) {
+    async function recordObservation(offerId, sourceId, fields, { origin, observedBy = null, observedAt, sourceRevision = null }) {
         const now = store.now();
         if (!Number.isFinite(observedAt)) throw new ApiError(422, 'request.invalid', 'an observation needs the time it was observed');
         if (observedAt > now + FUTURE_SKEW_MS) throw new ApiError(422, 'request.invalid', 'observed_at is in the future');
@@ -110,32 +110,32 @@ function createOffers(deps) {
             shipping_note: fields.shipping_note || null, condition: fields.condition || null, availability: fields.availability || null,
             origin, observed_by: observedBy, source_revision: sourceRevision, note: fields.note || null,
         };
-        q.insertObs.run(row);
-        const obs = q.obs.get(row.id);
-        watches.onObservation(obs);
+        await q.insertObs.run(row);
+        const obs = await q.obs.get(row.id);
+        await watches.onObservation(obs);
         return obs;
     }
 
-    function insertOffer(f) {
+    async function insertOffer(f) {
         const id = newId('dof');
-        q.insertOffer.run({
+        await q.insertOffer.run({
             id, slug: slugify(f.title, id), title: f.title, description: f.description || null, url: f.url, url_norm: urlKey(f.url),
             store_id: f.store_id || null, product_id: f.product_id || null, category: f.category || null, origin: f.origin,
             submitted_by: f.submitted_by || null, text_origin: f.text_origin || 'human', review_state: f.review_state || 'not_required',
             ai_summary: f.ai_summary || null, expires_at: f.expires_at == null ? null : f.expires_at, now: store.now(),
         });
-        return reads.get(id);
+        return await reads.get(id);
     }
 
-    const findByUrl = (url) => { const hit = q.byUrl.get(urlKey(url)); return hit ? reads.root(hit) : null; };
+    const findByUrl = async (url) => { const hit = await q.byUrl.get(urlKey(url)); return hit ? await reads.root(hit) : null; };
 
-    function mustRoot(idOrSlug) { return reads.root(reads.mustFind(idOrSlug)); }
+    async function mustRoot(idOrSlug) { return await reads.root(await reads.mustFind(idOrSlug)); }
 
-    function tallies(root) { return reads.tally(reads.groupIds(root.id)); }
+    async function tallies(root) { return await reads.tally(await reads.groupIds(root.id)); }
 
     // ── submission ──────────────────────────────────────────
 
-    function submit(viewer, input = {}, { ip = null, traceparent } = {}) {
+    async function submit(viewer, input = {}, { ip = null, traceparent } = {}) {
         const subject = viewer && viewer.subject;
         if (!subject) throw new ApiError(401, 'auth.required', 'Sign in to submit a deal');
         const url = normalizeUrl(input.url);
@@ -146,55 +146,55 @@ function createOffers(deps) {
         const expiresAt = parseInstant(input.expires_at, 'expires_at');
         if (expiresAt != null && expiresAt <= store.now()) throw new ApiError(422, 'request.invalid', 'expires_at is already in the past');
         const ai = viewer.kind === 'service' && viewer.origin === 'ai';
-        return store.tx(() => {
-            limits.check('submit', subject, config.abuse.submitPerDay, 24 * 3600 * 1000, 'submit.rate_limited');
-            const dup = findByUrl(url);
+        return await store.tx(async () => {
+            await limits.check('submit', subject, config.abuse.submitPerDay, 24 * 3600 * 1000, 'submit.rate_limited');
+            const dup = await findByUrl(url);
             if (dup) throw new ApiError(409, 'offer.duplicate', 'This link has already been posted', { existing: { id: dup.id, slug: dup.slug, url: publication.abs(publication.offerPath(dup)) } });
-            const st = catalog.ensureStore(domainOf(url), text(input.store_name, { max: 120 }));
+            const st = await catalog.ensureStore(domainOf(url), text(input.store_name, { max: 120 }));
             let product = null;
             const p = input.product && typeof input.product === 'object' ? input.product : null;
             if (input.product_slug) {
-                product = catalog.productBySlug(input.product_slug);
+                product = await catalog.productBySlug(input.product_slug);
                 if (!product) throw new ApiError(404, 'product.not_found', 'No such product');
             } else if (p && (p.name || p.gtin || p.mpn || p.sku)) {
-                product = catalog.resolve(p, { source: 'community', actor: subject }).product;
+                product = (await catalog.resolve(p, { source: 'community', actor: subject })).product;
             }
-            const offer = insertOffer({
+            const offer = await insertOffer({
                 title, description, url, store_id: st ? st.id : null, product_id: product ? product.id : null,
                 category: text(input.category, { max: 60 }), origin: 'community', submitted_by: subject,
                 text_origin: ai ? 'ai' : 'human', review_state: ai ? 'pending' : 'not_required', expires_at: expiresAt,
             });
-            const src = ensureSource(offer.id, { kind: 'submission', ref_service: 'deals', ref_type: 'submission', ref_id: offer.id, url, submitted_by: subject });
-            limits.hit('submit', subject);
-            if (ip) limits.hit('submit_ip', ip);
-            hotness.snapshot(offer.id, 'create');
-            recordObservation(offer.id, src.id, obs, { origin: 'community', observedBy: subject, observedAt: store.now() });
-            indexing.emitOffer('deals.offer.created', offer, { actor: subject, traceparent });
-            indexing.reindex(reads.get(offer.id));
-            return { offer: reads.get(offer.id), created: true };
+            const src = await ensureSource(offer.id, { kind: 'submission', ref_service: 'deals', ref_type: 'submission', ref_id: offer.id, url, submitted_by: subject });
+            await limits.hit('submit', subject);
+            if (ip) await limits.hit('submit_ip', ip);
+            await hotness.snapshot(offer.id, 'create');
+            await recordObservation(offer.id, src.id, obs, { origin: 'community', observedBy: subject, observedAt: store.now() });
+            await indexing.emitOffer('deals.offer.created', offer, { actor: subject, traceparent });
+            await indexing.reindex(await reads.get(offer.id));
+            return { offer: await reads.get(offer.id), created: true };
         });
     }
 
     /** Created by the Sources importer (no person); text is third-party and waits for review. */
-    function createImported(f, source, obsFields, { observedAt, sourceRevision }) {
-        const st = catalog.ensureStore(domainOf(f.url), f.store_name || null);
-        const offer = insertOffer({
+    async function createImported(f, source, obsFields, { observedAt, sourceRevision }) {
+        const st = await catalog.ensureStore(domainOf(f.url), f.store_name || null);
+        const offer = await insertOffer({
             title: f.title, description: f.description, url: f.url, store_id: st ? st.id : null, product_id: f.product_id || null,
             category: f.category || null, origin: 'import', submitted_by: null, text_origin: 'imported', review_state: 'pending',
             expires_at: f.expires_at == null ? null : f.expires_at,
         });
-        const src = ensureSource(offer.id, source);
-        hotness.snapshot(offer.id, 'create');
-        recordObservation(offer.id, src.id, obsFields, { origin: 'import', observedAt, sourceRevision });
-        indexing.emitOffer('deals.offer.created', offer, { actor: 'svc:deals', extra: { imported_from: { service: 'sources', type: 'item', id: source.ref_id } } });
-        indexing.reindex(reads.get(offer.id));
-        return reads.get(offer.id);
+        const src = await ensureSource(offer.id, source);
+        await hotness.snapshot(offer.id, 'create');
+        await recordObservation(offer.id, src.id, obsFields, { origin: 'import', observedAt, sourceRevision });
+        await indexing.emitOffer('deals.offer.created', offer, { actor: 'svc:deals', extra: { imported_from: { service: 'sources', type: 'item', id: source.ref_id } } });
+        await indexing.reindex(await reads.get(offer.id));
+        return await reads.get(offer.id);
     }
 
     // ── edits and observations ──────────────────────────────
 
-    function update(viewer, idOrSlug, input = {}, { traceparent } = {}) {
-        const root = mustRoot(idOrSlug);
+    async function update(viewer, idOrSlug, input = {}, { traceparent } = {}) {
+        const root = await mustRoot(idOrSlug);
         const actor = actorOf(viewer);
         if (!access.canEdit(viewer, root)) throw new ApiError(403, 'offer.forbidden', 'Only the person who submitted this deal or a moderator can edit it');
         if (root.status === 'disabled') throw new ApiError(409, 'offer.disabled', 'This deal was removed by moderators');
@@ -216,33 +216,33 @@ function createOffers(deps) {
             changes.text_origin = 'ai';
             changes.review_state = 'pending';
         }
-        return store.tx(() => {
+        return await store.tx(async () => {
             if (input.product_slug !== undefined || input.product !== undefined) {
                 if (!input.product_slug && !input.product) changes.product_id = null;
                 else if (input.product_slug) {
-                    const p = catalog.productBySlug(input.product_slug);
+                    const p = await catalog.productBySlug(input.product_slug);
                     if (!p) throw new ApiError(404, 'product.not_found', 'No such product');
                     changes.product_id = p.id;
-                } else changes.product_id = catalog.resolve(input.product, { source: 'community', actor }).product.id;
+                } else changes.product_id = (await catalog.resolve(input.product, { source: 'community', actor })).product.id;
             }
             const keys = Object.keys(changes);
             if (!keys.length) return { offer: root, changed: false };
             const oldProduct = root.product_id;
-            db.prepare(`UPDATE deal_offers SET ${keys.map((k) => `${k} = @${k}`).join(', ')}, updated_at = @now WHERE id = @id`).run({ ...changes, now: store.now(), id: root.id });
-            const after = reads.get(root.id);
-            indexing.emitOffer('deals.offer.updated', after, { actor, extra: { changed: keys }, traceparent });
-            moderated(viewer, root, 'offer.edited', { details: { changed: keys }, traceparent });
-            indexing.reindex(after);
-            if (oldProduct && oldProduct !== after.product_id) indexing.indexProduct(catalog.product(oldProduct));
+            await db.prepare(`UPDATE deal_offers SET ${keys.map((k) => `${k} = @${k}`).join(', ')}, updated_at = @now WHERE id = @id`).run({ ...changes, now: store.now(), id: root.id });
+            const after = await reads.get(root.id);
+            await indexing.emitOffer('deals.offer.updated', after, { actor, extra: { changed: keys }, traceparent });
+            await moderated(viewer, root, 'offer.edited', { details: { changed: keys }, traceparent });
+            await indexing.reindex(after);
+            if (oldProduct && oldProduct !== after.product_id) await indexing.indexProduct(await catalog.product(oldProduct));
             return { offer: after, changed: true };
         });
     }
 
     /** A person (or a service acting for one) reports what they see at the link right now. */
-    function observe(viewer, idOrSlug, input = {}, { ip = null, traceparent } = {}) {
+    async function observe(viewer, idOrSlug, input = {}, { ip = null, traceparent } = {}) {
         const subject = viewer && viewer.subject;
         if (!subject) throw new ApiError(401, 'auth.required', 'Sign in to report a price');
-        const root = mustRoot(idOrSlug);
+        const root = await mustRoot(idOrSlug);
         if (root.status === 'disabled') throw new ApiError(409, 'offer.disabled', 'This deal was removed by moderators');
         const fields = parseObservation(input);
         if (fields.price == null && fields.shipping == null && !fields.availability && !fields.condition) {
@@ -250,47 +250,47 @@ function createOffers(deps) {
         }
         let observedAt = store.now();
         if (viewer.kind === 'service' && input.observed_at != null) observedAt = parseInstant(input.observed_at, 'observed_at');
-        return store.tx(() => {
-            limits.check('observe', subject, config.abuse.observePerHour, 3600 * 1000, 'observe.rate_limited');
-            const src = ensureSource(root.id, { kind: 'community', ref_service: 'deals', ref_type: 'observer', ref_id: subject, ref_part: root.id, url: root.url, submitted_by: subject });
-            const obs = recordObservation(root.id, src.id, fields, { origin: 'community', observedBy: subject, observedAt });
-            limits.hit('observe', subject);
-            if (ip) limits.hit('observe_ip', ip);
-            db.prepare('UPDATE deal_offers SET updated_at = ? WHERE id = ?').run(store.now(), root.id);
-            indexing.emitOffer('deals.offer.updated', root, { actor: subject, extra: { changed: ['observation'], observation_id: obs.id }, traceparent });
-            indexing.reindex(reads.get(root.id));
-            return { offer: reads.get(root.id), observation: obs };
+        return await store.tx(async () => {
+            await limits.check('observe', subject, config.abuse.observePerHour, 3600 * 1000, 'observe.rate_limited');
+            const src = await ensureSource(root.id, { kind: 'community', ref_service: 'deals', ref_type: 'observer', ref_id: subject, ref_part: root.id, url: root.url, submitted_by: subject });
+            const obs = await recordObservation(root.id, src.id, fields, { origin: 'community', observedBy: subject, observedAt });
+            await limits.hit('observe', subject);
+            if (ip) await limits.hit('observe_ip', ip);
+            await db.prepare('UPDATE deal_offers SET updated_at = ? WHERE id = ?').run(store.now(), root.id);
+            await indexing.emitOffer('deals.offer.updated', root, { actor: subject, extra: { changed: ['observation'], observation_id: obs.id }, traceparent });
+            await indexing.reindex(await reads.get(root.id));
+            return { offer: await reads.get(root.id), observation: obs };
         });
     }
 
     // ── expiry and moderation ───────────────────────────────
 
-    function expireRow(root, { actor, reason, traceparent }) {
+    async function expireRow(root, { actor, reason, traceparent }) {
         const now = store.now();
-        db.prepare("UPDATE deal_offers SET status = 'expired', expired_at = ?, expired_reason = ?, updated_at = ? WHERE id = ?").run(now, reason, now, root.id);
-        logAction('expire', { offerId: root.id, actor: actor || 'svc:deals', reason, before: { status: root.status }, after: { status: 'expired' } });
-        const after = reads.get(root.id);
-        indexing.emitOffer('deals.offer.expired', after, { actor, extra: { reason }, traceparent });
-        indexing.reindex(after);
+        await db.prepare("UPDATE deal_offers SET status = 'expired', expired_at = ?, expired_reason = ?, updated_at = ? WHERE id = ?").run(now, reason, now, root.id);
+        await logAction('expire', { offerId: root.id, actor: actor || 'svc:deals', reason, before: { status: root.status }, after: { status: 'expired' } });
+        const after = await reads.get(root.id);
+        await indexing.emitOffer('deals.offer.expired', after, { actor, extra: { reason }, traceparent });
+        await indexing.reindex(after);
         return after;
     }
 
-    function expire(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
-        const root = mustRoot(idOrSlug);
+    async function expire(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
+        const root = await mustRoot(idOrSlug);
         if (!access.canEdit(viewer, root)) throw new ApiError(403, 'offer.forbidden', 'Only the person who submitted this deal or a moderator can mark it expired');
         if (root.status !== 'active') throw new ApiError(409, 'offer.not_active', `This deal is ${root.status}`);
         const why = access.isStaff(viewer) ? `moderator${reason ? `: ${text(reason, { max: 200 })}` : ''}` : 'submitter';
-        return store.tx(() => {
-            const after = expireRow(root, { actor: actorOf(viewer), reason: why, traceparent });
-            moderated(viewer, root, 'offer.expired', { reason: text(reason, { max: 200 }) || null, traceparent });
+        return await store.tx(async () => {
+            const after = await expireRow(root, { actor: actorOf(viewer), reason: why, traceparent });
+            await moderated(viewer, root, 'offer.expired', { reason: text(reason, { max: 200 }) || null, traceparent });
             return after;
         });
     }
 
     /** Worker: offers whose STATED expiry has passed. Unknown expiry is never assumed. */
-    function expireDue() {
-        const due = q.dueExpiry.all(store.now());
-        store.tx(() => { for (const o of due) expireRow(o, { actor: null, reason: 'stated_expiry' }); });
+    async function expireDue() {
+        const due = await q.dueExpiry.all(store.now());
+        await store.tx(async () => { for (const o of due) await expireRow(o, { actor: null, reason: 'stated_expiry' }); });
         return due.length;
     }
 
@@ -298,19 +298,19 @@ function createOffers(deps) {
         if (!access.isModerator(viewer, cap)) throw new ApiError(403, 'moderation.forbidden', 'Moderators only');
     }
 
-    function disable(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
+    async function disable(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
         requireStaff(viewer, 'deals.offer.moderate');
-        const root = mustRoot(idOrSlug);
+        const root = await mustRoot(idOrSlug);
         const why = text(reason, { field: 'reason', min: 3, max: 300, required: true });
         if (root.status === 'disabled') return { offer: root, changed: false };
-        const out = store.tx(() => {
+        const out = await store.tx(async () => {
             const now = store.now();
-            db.prepare("UPDATE deal_offers SET status = 'disabled', disabled_at = ?, disabled_reason = ?, disabled_by = ?, updated_at = ? WHERE id = ?").run(now, why, actorOf(viewer), now, root.id);
-            logAction('disable', { offerId: root.id, actor: actorOf(viewer), reason: why, before: { status: root.status }, after: { status: 'disabled' } });
-            moderated(viewer, root, 'offer.disabled', { reason: why, details: { previous: root.status }, traceparent });
-            const after = reads.get(root.id);
-            indexing.emitOffer('deals.offer.updated', after, { actor: actorOf(viewer), extra: { changed: ['status'], moderation: 'disabled' }, traceparent });
-            indexing.reindex(after);
+            await db.prepare("UPDATE deal_offers SET status = 'disabled', disabled_at = ?, disabled_reason = ?, disabled_by = ?, updated_at = ? WHERE id = ?").run(now, why, actorOf(viewer), now, root.id);
+            await logAction('disable', { offerId: root.id, actor: actorOf(viewer), reason: why, before: { status: root.status }, after: { status: 'disabled' } });
+            await moderated(viewer, root, 'offer.disabled', { reason: why, details: { previous: root.status }, traceparent });
+            const after = await reads.get(root.id);
+            await indexing.emitOffer('deals.offer.updated', after, { actor: actorOf(viewer), extra: { changed: ['status'], moderation: 'disabled' }, traceparent });
+            await indexing.reindex(after);
             return { offer: after, changed: true };
         });
         threadVisibility(out.offer, 'hidden');
@@ -322,21 +322,21 @@ function createOffers(deps) {
         if (community && community.enabled) community.setThreadVisibility(offer, visibility).catch(() => {});
     }
 
-    function enable(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
+    async function enable(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
         requireStaff(viewer, 'deals.offer.moderate');
-        const root = mustRoot(idOrSlug);
+        const root = await mustRoot(idOrSlug);
         if (root.status === 'active') return { offer: root, changed: false };
         const wasDisabled = root.status === 'disabled';
-        const out = store.tx(() => {
+        const out = await store.tx(async () => {
             const now = store.now();
             const keepExpiry = root.expires_at != null && root.expires_at > now ? root.expires_at : null;
-            db.prepare(`UPDATE deal_offers SET status = 'active', disabled_at = NULL, disabled_reason = NULL, disabled_by = NULL,
+            await db.prepare(`UPDATE deal_offers SET status = 'active', disabled_at = NULL, disabled_reason = NULL, disabled_by = NULL,
                         expired_at = NULL, expired_reason = NULL, expires_at = ?, updated_at = ? WHERE id = ?`).run(keepExpiry, now, root.id);
-            logAction('enable', { offerId: root.id, actor: actorOf(viewer), reason: text(reason, { max: 300 }), before: { status: root.status, disabled_reason: root.disabled_reason, expired_reason: root.expired_reason, expires_at: root.expires_at }, after: { status: 'active', expires_at: keepExpiry } });
-            moderated(viewer, root, 'offer.enabled', { reason: text(reason, { max: 300 }) || null, details: { previous: root.status }, traceparent });
-            const after = reads.get(root.id);
-            indexing.emitOffer('deals.offer.updated', after, { actor: actorOf(viewer), extra: { changed: ['status'], moderation: 'enabled' }, traceparent });
-            indexing.reindex(after);
+            await logAction('enable', { offerId: root.id, actor: actorOf(viewer), reason: text(reason, { max: 300 }), before: { status: root.status, disabled_reason: root.disabled_reason, expired_reason: root.expired_reason, expires_at: root.expires_at }, after: { status: 'active', expires_at: keepExpiry } });
+            await moderated(viewer, root, 'offer.enabled', { reason: text(reason, { max: 300 }) || null, details: { previous: root.status }, traceparent });
+            const after = await reads.get(root.id);
+            await indexing.emitOffer('deals.offer.updated', after, { actor: actorOf(viewer), extra: { changed: ['status'], moderation: 'enabled' }, traceparent });
+            await indexing.reindex(after);
             return { offer: after, changed: true };
         });
         if (wasDisabled) threadVisibility(out.offer, 'public');
@@ -344,74 +344,74 @@ function createOffers(deps) {
     }
 
     /** A person confirms imported or AI-assisted text (only a usr_ subject can review). */
-    function review(viewer, idOrSlug, { note } = {}, { traceparent } = {}) {
+    async function review(viewer, idOrSlug, { note } = {}, { traceparent } = {}) {
         requireStaff(viewer, 'deals.offer.moderate');
         const reviewer = viewer.subject;
         if (!reviewer) throw new ApiError(403, 'review.person_required', 'A review is recorded for a person (usr_…), never for a service');
-        const root = mustRoot(idOrSlug);
+        const root = await mustRoot(idOrSlug);
         if (root.review_state !== 'pending') return { offer: root, changed: false };
-        return store.tx(() => {
+        return await store.tx(async () => {
             const now = store.now();
-            db.prepare("UPDATE deal_offers SET review_state = 'reviewed', reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE id = ?").run(reviewer, now, now, root.id);
-            logAction('review', { offerId: root.id, actor: reviewer, reason: text(note, { max: 300 }), before: { review_state: 'pending' }, after: { review_state: 'reviewed' } });
-            moderated(viewer, root, 'offer.reviewed', { reason: text(note, { max: 300 }) || null, traceparent });
-            const after = reads.get(root.id);
-            indexing.emitOffer('deals.offer.updated', after, { actor: reviewer, extra: { changed: ['review_state'] }, traceparent });
-            indexing.reindex(after);
+            await db.prepare("UPDATE deal_offers SET review_state = 'reviewed', reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE id = ?").run(reviewer, now, now, root.id);
+            await logAction('review', { offerId: root.id, actor: reviewer, reason: text(note, { max: 300 }), before: { review_state: 'pending' }, after: { review_state: 'reviewed' } });
+            await moderated(viewer, root, 'offer.reviewed', { reason: text(note, { max: 300 }) || null, traceparent });
+            const after = await reads.get(root.id);
+            await indexing.emitOffer('deals.offer.updated', after, { actor: reviewer, extra: { changed: ['review_state'] }, traceparent });
+            await indexing.reindex(after);
             return { offer: after, changed: true };
         });
     }
 
-    function merge(viewer, idOrSlug, intoIdOrSlug, { reason } = {}, { traceparent } = {}) {
+    async function merge(viewer, idOrSlug, intoIdOrSlug, { reason } = {}, { traceparent } = {}) {
         requireStaff(viewer, 'deals.offer.merge');
-        const dup = reads.mustFind(idOrSlug);
-        const target = reads.root(reads.mustFind(intoIdOrSlug));
+        const dup = await reads.mustFind(idOrSlug);
+        const target = await reads.root(await reads.mustFind(intoIdOrSlug));
         if (dup.merged_into) throw new ApiError(409, 'offer.already_merged', 'This offer is already merged; unmerge it first');
-        if (reads.groupIds(dup.id).includes(target.id)) throw new ApiError(409, 'offer.merge_cycle', 'Cannot merge an offer into itself or into an offer merged into it');
+        if ((await reads.groupIds(dup.id)).includes(target.id)) throw new ApiError(409, 'offer.merge_cycle', 'Cannot merge an offer into itself or into an offer merged into it');
         const actor = actorOf(viewer);
-        return store.tx(() => {
-            const before = { target: tallies(target), duplicate: tallies(dup) };
+        return await store.tx(async () => {
+            const before = { target: await tallies(target), duplicate: await tallies(dup) };
             const now = store.now();
-            db.prepare('UPDATE deal_offers SET merged_into = ?, merged_at = ?, merged_by = ?, updated_at = ? WHERE id = ?').run(target.id, now, actor, now, dup.id);
-            const after = { target: tallies(target) };
-            logAction('merge', { offerId: dup.id, targetId: target.id, actor, reason: text(reason, { max: 300 }), before, after });
-            moderated(viewer, dup, 'offer.merged', { reason: text(reason, { max: 300 }) || null, details: { into: target.id }, traceparent });
-            hotness.snapshot(target.id, 'merge');
-            indexing.emitOffer('deals.offer.updated', target, { actor, extra: { changed: ['merged'], merged_offer_id: dup.id }, traceparent });
-            indexing.indexOffer(reads.get(dup.id));
-            indexing.reindex(reads.get(target.id));
-            if (dup.product_id && dup.product_id !== target.product_id) indexing.indexProduct(catalog.product(dup.product_id));
-            return { offer: reads.get(target.id), merged: reads.get(dup.id), before, after };
+            await db.prepare('UPDATE deal_offers SET merged_into = ?, merged_at = ?, merged_by = ?, updated_at = ? WHERE id = ?').run(target.id, now, actor, now, dup.id);
+            const after = { target: await tallies(target) };
+            await logAction('merge', { offerId: dup.id, targetId: target.id, actor, reason: text(reason, { max: 300 }), before, after });
+            await moderated(viewer, dup, 'offer.merged', { reason: text(reason, { max: 300 }) || null, details: { into: target.id }, traceparent });
+            await hotness.snapshot(target.id, 'merge');
+            await indexing.emitOffer('deals.offer.updated', target, { actor, extra: { changed: ['merged'], merged_offer_id: dup.id }, traceparent });
+            await indexing.indexOffer(await reads.get(dup.id));
+            await indexing.reindex(await reads.get(target.id));
+            if (dup.product_id && dup.product_id !== target.product_id) await indexing.indexProduct(await catalog.product(dup.product_id));
+            return { offer: await reads.get(target.id), merged: await reads.get(dup.id), before, after };
         });
     }
 
-    function unmerge(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
+    async function unmerge(viewer, idOrSlug, { reason } = {}, { traceparent } = {}) {
         requireStaff(viewer, 'deals.offer.merge');
-        const dup = reads.mustFind(idOrSlug);
+        const dup = await reads.mustFind(idOrSlug);
         if (!dup.merged_into) throw new ApiError(409, 'offer.not_merged', 'This offer is not merged');
-        const parentRoot = reads.root(dup);
+        const parentRoot = await reads.root(dup);
         const actor = actorOf(viewer);
-        return store.tx(() => {
-            const before = { target: tallies(parentRoot) };
+        return await store.tx(async () => {
+            const before = { target: await tallies(parentRoot) };
             const now = store.now();
-            db.prepare('UPDATE deal_offers SET merged_into = NULL, merged_at = NULL, merged_by = NULL, updated_at = ? WHERE id = ?').run(now, dup.id);
-            const restored = reads.get(dup.id);
-            const after = { target: tallies(parentRoot), duplicate: tallies(restored) };
-            logAction('unmerge', { offerId: dup.id, targetId: parentRoot.id, actor, reason: text(reason, { max: 300 }), before, after });
-            moderated(viewer, dup, 'offer.unmerged', { reason: text(reason, { max: 300 }) || null, details: { from: parentRoot.id }, traceparent });
-            hotness.snapshot(parentRoot.id, 'unmerge');
-            hotness.snapshot(restored.id, 'unmerge');
-            indexing.emitOffer('deals.offer.updated', parentRoot, { actor, extra: { changed: ['unmerged'], unmerged_offer_id: dup.id }, traceparent });
-            indexing.emitOffer('deals.offer.updated', restored, { actor, extra: { changed: ['unmerged'], unmerged_from: parentRoot.id }, traceparent });
-            indexing.reindex(reads.get(parentRoot.id));
-            indexing.reindex(restored);
-            return { offer: restored, from: reads.get(parentRoot.id), before, after };
+            await db.prepare('UPDATE deal_offers SET merged_into = NULL, merged_at = NULL, merged_by = NULL, updated_at = ? WHERE id = ?').run(now, dup.id);
+            const restored = await reads.get(dup.id);
+            const after = { target: await tallies(parentRoot), duplicate: await tallies(restored) };
+            await logAction('unmerge', { offerId: dup.id, targetId: parentRoot.id, actor, reason: text(reason, { max: 300 }), before, after });
+            await moderated(viewer, dup, 'offer.unmerged', { reason: text(reason, { max: 300 }) || null, details: { from: parentRoot.id }, traceparent });
+            await hotness.snapshot(parentRoot.id, 'unmerge');
+            await hotness.snapshot(restored.id, 'unmerge');
+            await indexing.emitOffer('deals.offer.updated', parentRoot, { actor, extra: { changed: ['unmerged'], unmerged_offer_id: dup.id }, traceparent });
+            await indexing.emitOffer('deals.offer.updated', restored, { actor, extra: { changed: ['unmerged'], unmerged_from: parentRoot.id }, traceparent });
+            await indexing.reindex(await reads.get(parentRoot.id));
+            await indexing.reindex(restored);
+            return { offer: restored, from: await reads.get(parentRoot.id), before, after };
         });
     }
 
-    function moderationLog(root) {
-        const ids = JSON.stringify(reads.groupIds(root.id));
-        return q.logFor.all(ids, ids);
+    async function moderationLog(root) {
+        const ids = JSON.stringify(await reads.groupIds(root.id));
+        return await q.logFor.all(ids, ids);
     }
 
     return {

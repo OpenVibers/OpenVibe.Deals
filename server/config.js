@@ -37,6 +37,10 @@ function load(env = process.env) {
             hour: Math.max(1, int(env.DEALS_LIMITS_HOUR, 3000)),
         },
 
+        // PostgreSQL (ADR-035): DATABASE_URL serves (PgBouncer), DATABASE_DIRECT_URL migrates (owner role).
+        db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '' },
+        valkey: { url: env.VALKEY_URL || '', prefix: env.VALKEY_PREFIX || 'ov:deals:' },
+        // The SQLite file of releases before the switch: read once by scripts/migrate-to-postgres.js.
         dbPath: env.DEALS_DB_PATH || './data/deals.db',
 
         // OpenVibe.Network: SSO (OAuth2 authorization server), JWKS, client-credentials tokens.

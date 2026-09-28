@@ -23,6 +23,7 @@ function createPeople({ store, config, fetchImpl = globalThis.fetch }) {
     }) : null;
     const q = {
         get: db.prepare('SELECT * FROM subject_projections WHERE subject = ?'),
+        getMany: db.prepare('SELECT * FROM subject_projections WHERE subject = ANY(?)'),
         byUsername: db.prepare('SELECT * FROM subject_projections WHERE username = ? ORDER BY refreshed_at DESC LIMIT 1'),
         put: db.prepare(`INSERT INTO subject_projections (subject, username, display_name, avatar_url, refreshed_at) VALUES (?, ?, ?, ?, ?)
                          ON CONFLICT (subject) DO UPDATE SET username = excluded.username, display_name = excluded.display_name,
@@ -32,9 +33,9 @@ function createPeople({ store, config, fetchImpl = globalThis.fetch }) {
     };
     const absAvatar = (u) => (!u ? null : /^https?:\/\//i.test(u) ? u : `${config.networkUrl}${u.startsWith('/') ? '' : '/'}${u}`);
 
-    function remember(subject, p) {
+    async function remember(subject, p) {
         if (!ids.isSubjectId('user', subject) || !p) return;
-        q.put.run(subject, p.username ? String(p.username).toLowerCase() : null, p.display_name || p.username || null, absAvatar(p.avatar_url), store.now());
+        await q.put.run(subject, p.username ? String(p.username).toLowerCase() : null, p.display_name || p.username || null, absAvatar(p.avatar_url), store.now());
     }
 
     async function resolve(subjects) {
@@ -48,7 +49,7 @@ function createPeople({ store, config, fetchImpl = globalThis.fetch }) {
         if (res.status === 401) tokens.invalidate && tokens.invalidate();
         const data = await res.json().catch(() => null);
         if (!res.ok || !data || typeof data.results !== 'object') throw new Error(`resolve-batch answered ${res.status}`);
-        for (const s of subjects) if (data.results[s]) remember(s, data.results[s]);
+        for (const s of subjects) if (data.results[s]) await remember(s, data.results[s]);
     }
 
     const shape = (row, subject) => (row
@@ -58,15 +59,17 @@ function createPeople({ store, config, fetchImpl = globalThis.fetch }) {
     return {
         enabled,
         /** From a verified sign-in: the member's own claims are a fresh projection. */
-        rememberClaims(subject, claims) { remember(subject, claims); q.seen.run(store.now(), subject); },
+        async rememberClaims(subject, claims) { await remember(subject, claims); await q.seen.run(store.now(), subject); },
 
         /** When Deals first saw this person signed in (abuse controls: account age evidence), or null. */
-        firstSeen(subject) { const r = q.firstSeen.get(subject); return r ? r.first_seen_at : null; },
+        async firstSeen(subject) { const r = await q.firstSeen.get(subject); return r ? r.first_seen_at : null; },
 
         /** Map subject → { name, username, avatarUrl, known }. Missing entries are fetched (bounded wait). */
         async many(subjects) {
             const list = [...new Set((subjects || []).filter((s) => ids.isSubjectId('user', s)))];
-            const missing = list.filter((s) => { const r = q.get.get(s); return !r || store.now() - r.refreshed_at > TTL_MS; });
+            const read = async () => new Map((list.length ? await q.getMany.all(list) : []).map((r) => [r.subject, r]));
+            let rows = await read();
+            const missing = list.filter((s) => { const r = rows.get(s); return !r || store.now() - r.refreshed_at > TTL_MS; });
             if (missing.length && tokens) {
                 let timer;
                 await Promise.race([
@@ -74,19 +77,20 @@ function createPeople({ store, config, fetchImpl = globalThis.fetch }) {
                     new Promise((r) => { timer = setTimeout(r, WAIT_MS); }),
                 ]);
                 clearTimeout(timer);
+                rows = await read();
             }
-            return new Map(list.map((s) => [s, shape(q.get.get(s), s)]));
+            return new Map(list.map((s) => [s, shape(rows.get(s) || null, s)]));
         },
 
         async one(subject) { return (await this.many([subject])).get(subject) || shape(null, subject); },
 
         /** The subject a username belongs to, from people Deals has seen. */
-        byUsername(username) {
-            const row = q.byUsername.get(String(username || '').toLowerCase());
+        async byUsername(username) {
+            const row = await q.byUsername.get(String(username || '').toLowerCase());
             return row ? shape(row, row.subject) : null;
         },
 
-        cached: (subject) => shape(q.get.get(subject), subject),
+        cached: async (subject) => shape(await q.get.get(subject), subject),
     };
 }
 

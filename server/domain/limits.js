@@ -20,24 +20,24 @@ function createLimits({ config, store }) {
     const insert = db.prepare('INSERT INTO rate_events (kind, key, at) VALUES (?, ?, ?)');
     const prune = db.prepare('DELETE FROM rate_events WHERE at < ?');
 
-    function check(kind, key, max, windowMs, code = 'rate.limited') {
+    async function check(kind, key, max, windowMs, code = 'rate.limited') {
         if (!key || !(max > 0)) return;
         const since = store.now() - windowMs;
-        const r = count.get(kind, key, since);
+        const r = await count.get(kind, key, since);
         if (r.n >= max) {
             const retry = Math.max(1, Math.ceil((r.oldest + windowMs - store.now()) / 1000));
             throw new ApiError(429, code, `Too many ${kind.replace(/_/g, ' ')} actions; try again in ${retry} s`, { retry_after: retry });
         }
     }
 
-    function hit(kind, key) { if (key) insert.run(kind, key, store.now()); }
+    async function hit(kind, key) { if (key) await insert.run(kind, key, store.now()); }
 
     function ipHash(ip) {
         if (!ip) return null;
         return crypto.createHmac('sha256', config.ipHashSecret || fallbackKey).update(`deals-ip:${ip}`).digest('base64url').slice(0, 22);
     }
 
-    return { check, hit, ipHash, prune: (olderThanMs = 3 * 24 * 3600 * 1000) => prune.run(store.now() - olderThanMs).changes, stableIpHash: Boolean(config.ipHashSecret) };
+    return { check, hit, ipHash, prune: async (olderThanMs = 3 * 24 * 3600 * 1000) => (await prune.run(store.now() - olderThanMs)).changes, stableIpHash: Boolean(config.ipHashSecret) };
 }
 
 module.exports = { createLimits };

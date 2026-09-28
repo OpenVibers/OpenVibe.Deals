@@ -47,14 +47,14 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                                   JOIN deal_offers f ON f.id = s.offer_id
                                   JOIN deal_price_observations o ON o.source_id = s.id
                                  WHERE s.kind = 'sources_item' AND s.removed_at IS NULL AND f.status = 'active'
-                                 GROUP BY s.ref_id HAVING last < ? ORDER BY last LIMIT ?`),
+                                 GROUP BY s.ref_id HAVING MAX(o.observed_at) < ? ORDER BY last LIMIT ?`),
     };
     let lastError = null;
     let lastRunAt = null;
     let running = null;
     let kickTimer = null;
 
-    const cursor = () => Number((q.getState.get(CURSOR_KEY) || {}).value || 0);
+    const cursor = async () => Number((await q.getState.get(CURSOR_KEY) || {}).value || 0);
 
     function amount(v) { try { return parseAmount(v, 'price'); } catch { return null; } }
     function currencyOf(v) { return typeof v === 'string' && /^[A-Z]{3}$/.test(v) ? v : null; }
@@ -102,30 +102,30 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         return [];
     }
 
-    function removeItem(item) {
+    async function removeItem(item) {
         const reason = (item.removed && item.removed.reason) || 'removed at the source';
-        const rows = q.itemRows.all(item.id);
-        for (const s of rows) q.removeSource.run(store.now(), reason, store.now(), s.id);
+        const rows = await q.itemRows.all(item.id);
+        for (const s of rows) await q.removeSource.run(store.now(), reason, store.now(), s.id);
         const touched = [...new Set(rows.map((s) => s.offer_id))];
         for (const id of touched) {
-            const offer = reads.get(id);
-            if (offer.origin === 'import' && offer.status !== 'disabled' && q.liveSources.get(id).n === 0) {
+            const offer = await reads.get(id);
+            if (offer.origin === 'import' && offer.status !== 'disabled' && (await q.liveSources.get(id)).n === 0) {
                 const now = store.now();
-                db.prepare("UPDATE deal_offers SET status = 'disabled', disabled_at = ?, disabled_reason = ?, disabled_by = 'svc:deals', updated_at = ? WHERE id = ?")
+                await db.prepare("UPDATE deal_offers SET status = 'disabled', disabled_at = ?, disabled_reason = ?, disabled_by = 'svc:deals', updated_at = ? WHERE id = ?")
                     .run(now, `source item removed: ${reason}`, now, id);
-                offers.logAction('disable', { offerId: id, actor: 'svc:deals', reason: `source item removed: ${reason}`, before: { status: offer.status }, after: { status: 'disabled' } });
+                await offers.logAction('disable', { offerId: id, actor: 'svc:deals', reason: `source item removed: ${reason}`, before: { status: offer.status }, after: { status: 'disabled' } });
             }
-            const after = reads.get(id);
-            indexing.emitOffer('deals.offer.updated', after, { actor: 'svc:deals', extra: { changed: ['sources'], source_removed: item.id } });
-            indexing.reindex(after);
+            const after = await reads.get(id);
+            await indexing.emitOffer('deals.offer.updated', after, { actor: 'svc:deals', extra: { changed: ['sources'], source_removed: item.id } });
+            await indexing.reindex(after);
         }
         return touched.length ? 'removed' : 'removed:unknown';
     }
 
     /** One item, inside a transaction. Returns what happened (for logs and tests). */
-    function importItem(item) {
+    async function importItem(item) {
         if (!item || item.category !== 'deals') return 'skipped:category';
-        if (item.removed) return removeItem(item);
+        if (item.removed) return await removeItem(item);
         const retrievedAt = Date.parse(item.provenance && item.provenance.retrieved_at);
         if (!Number.isFinite(retrievedAt)) return 'skipped:no_observation_time';
         const list = candidates(item);
@@ -137,42 +137,42 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 source_key: item.source_key, url: item.canonical_url, label: item.title,
                 license_note: item.provenance.license_note || null, retrieved_at: retrievedAt,
             };
-            const existing = q.sourceRow.get(item.id, c.part);
+            const existing = await q.sourceRow.get(item.id, c.part);
             if (existing) {
                 const advanced = item.revision > (existing.ref_revision || 0) || retrievedAt > (existing.retrieved_at || 0);
                 if (!advanced || existing.removed_at) { outcomes.push('unchanged'); continue; }
                 const origin = item.revision > (existing.ref_revision || 0) ? 'import' : 'import_refresh';
-                q.bumpSource.run(Math.max(item.revision, existing.ref_revision || 0), Math.max(retrievedAt, existing.retrieved_at || 0), item.title, store.now(), existing.id);
-                const obs = offers.recordObservation(existing.offer_id, existing.id, c.obs, { origin, observedAt: retrievedAt, sourceRevision: item.revision });
-                const offer = reads.get(existing.offer_id);
+                await q.bumpSource.run(Math.max(item.revision, existing.ref_revision || 0), Math.max(retrievedAt, existing.retrieved_at || 0), item.title, store.now(), existing.id);
+                const obs = await offers.recordObservation(existing.offer_id, existing.id, c.obs, { origin, observedAt: retrievedAt, sourceRevision: item.revision });
+                const offer = await reads.get(existing.offer_id);
                 const changed = ['observation'];
                 if (origin === 'import' && c.expires_at && offer.status === 'active' && offer.origin === 'import' && c.expires_at !== offer.expires_at) {
-                    db.prepare('UPDATE deal_offers SET expires_at = ?, updated_at = ? WHERE id = ?').run(c.expires_at, store.now(), offer.id);
+                    await db.prepare('UPDATE deal_offers SET expires_at = ?, updated_at = ? WHERE id = ?').run(c.expires_at, store.now(), offer.id);
                     changed.push('expires_at');
                 }
                 // Anything else the observation moved on the offer (price, product) is named too, so consumers never miss a field.
-                const after = reads.get(offer.id);
+                const after = await reads.get(offer.id);
                 for (const k of ['product_id', 'title', 'status']) if (after && offer && after[k] !== offer[k] && !changed.includes(k)) changed.push(k);
-                indexing.emitOffer('deals.offer.updated', after, { actor: 'svc:deals', extra: { changed, observation_id: obs.id } });
-                indexing.reindex(reads.get(offer.id));
+                await indexing.emitOffer('deals.offer.updated', after, { actor: 'svc:deals', extra: { changed, observation_id: obs.id } });
+                await indexing.reindex(await reads.get(offer.id));
                 outcomes.push(origin === 'import' ? 'updated' : 'refreshed');
                 continue;
             }
             let productId = null;
             if (c.product) {
-                try { productId = catalog.resolve(c.product, { source: 'import', actor: 'svc:deals' }).product.id; } catch { productId = null; }
+                try { productId = (await catalog.resolve(c.product, { source: 'import', actor: 'svc:deals' })).product.id; } catch { productId = null; }
             }
-            const dup = offers.findByUrl(c.url);
+            const dup = await offers.findByUrl(c.url);
             if (dup) {
-                const s = offers.ensureSource(dup.id, src);
-                const obs = offers.recordObservation(dup.id, s.id, c.obs, { origin: 'import', observedAt: retrievedAt, sourceRevision: item.revision });
-                if (productId && !dup.product_id) db.prepare('UPDATE deal_offers SET product_id = ?, updated_at = ? WHERE id = ?').run(productId, store.now(), dup.id);
-                indexing.emitOffer('deals.offer.updated', reads.get(dup.id), { actor: 'svc:deals', extra: { changed: ['sources'], observation_id: obs.id } });
-                indexing.reindex(reads.get(dup.id));
+                const s = await offers.ensureSource(dup.id, src);
+                const obs = await offers.recordObservation(dup.id, s.id, c.obs, { origin: 'import', observedAt: retrievedAt, sourceRevision: item.revision });
+                if (productId && !dup.product_id) await db.prepare('UPDATE deal_offers SET product_id = ?, updated_at = ? WHERE id = ?').run(productId, store.now(), dup.id);
+                await indexing.emitOffer('deals.offer.updated', await reads.get(dup.id), { actor: 'svc:deals', extra: { changed: ['sources'], observation_id: obs.id } });
+                await indexing.reindex(await reads.get(dup.id));
                 outcomes.push('attached');
                 continue;
             }
-            offers.createImported({
+            await offers.createImported({
                 url: c.url, title: String(c.title).slice(0, 200), description: c.description, product_id: productId,
                 store_name: c.store_name, expires_at: c.expires_at != null && c.expires_at > store.now() ? c.expires_at : null,
             }, src, c.obs, { observedAt: retrievedAt, sourceRevision: item.revision });
@@ -181,7 +181,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         return outcomes.join(',');
     }
 
-    const importOne = db.transaction((item) => importItem(item));
+    const importOne = async (item) => await db.tx(async () => await importItem(item));
 
     /** Pull the change feed from the cursor. Never throws; the cursor only moves past applied items. */
     async function pull() {
@@ -191,18 +191,18 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
             const summary = { pages: 0, items: 0, outcomes: {} };
             try {
                 for (let p = 0; p < config.sources.maxPages; p++) {
-                    const after = cursor();
+                    const after = await cursor();
                     const page = await sources.items({ after, limit: config.sources.pageSize });
                     summary.pages++;
-                    store.tx(() => {
+                    await store.tx(async () => {
                         for (const item of page.items || []) {
                             let out;
                             // Each item in its own savepoint: one unreadable item is reported, not a stuck cursor.
-                            try { out = importOne(item); } catch (err) { out = 'failed'; log.warn(`[Deals] import of ${item && item.id} failed: ${err.message}`); }
+                            try { out = await importOne(item); } catch (err) { out = 'failed'; log.warn(`[Deals] import of ${item && item.id} failed: ${err.message}`); }
                             summary.items++;
                             for (const o of out.split(',')) summary.outcomes[o] = (summary.outcomes[o] || 0) + 1;
                         }
-                        if (Number.isFinite(page.next_after) && page.next_after > after) q.setState.run(CURSOR_KEY, String(page.next_after), store.now());
+                        if (Number.isFinite(page.next_after) && page.next_after > after) await q.setState.run(CURSOR_KEY, String(page.next_after), store.now());
                     });
                     if (!page.more) break;
                 }
@@ -226,13 +226,13 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
      */
     async function refresh() {
         if (!sources.enabled) return { skipped: 'import off' };
-        const due = q.refreshDue.all(store.now() - config.freshnessMs / 2, config.sources.refreshBatch);
+        const due = await q.refreshDue.all(store.now() - config.freshnessMs / 2, config.sources.refreshBatch);
         const out = { checked: 0, outcomes: {} };
         for (const { ref_id: id } of due) {
             try {
                 const data = await sources.item(id);
                 out.checked++;
-                const o = store.tx(() => importItem(data.item));
+                const o = await store.tx(async () => await importItem(data.item));
                 for (const x of o.split(',')) out.outcomes[x] = (out.outcomes[x] || 0) + 1;
             } catch (err) {
                 if (err.status === 404) continue;
@@ -251,7 +251,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
 
     return {
         pull, refresh, kick, importItem, cursor,
-        status: () => ({ enabled: sources.enabled, cursor: cursor(), last_error: lastError, last_run_at: iso(lastRunAt) }),
+        status: async () => ({ enabled: sources.enabled, cursor: await cursor(), last_error: lastError, last_run_at: iso(lastRunAt) }),
     };
 }
 

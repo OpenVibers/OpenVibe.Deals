@@ -40,38 +40,38 @@ function createVotes({ config, store, reads, hotness, limits, flags, people, out
                             VALUES (@offer_id, @subject, @value, @weight, @ip_hash, @via, @now, @at)
                             ON CONFLICT (offer_id, subject) DO UPDATE SET value = excluded.value, weight = excluded.weight,
                                 ip_hash = COALESCE(excluded.ip_hash, deal_votes.ip_hash), via = excluded.via, updated_at = excluded.updated_at`),
-        lastInGroup: db.prepare('SELECT MAX(updated_at) AS t FROM deal_votes WHERE subject = ? AND offer_id IN (SELECT value FROM json_each(?))'),
-        sameIp: db.prepare(`SELECT DISTINCT subject FROM deal_votes WHERE ip_hash = ? AND value <> 0 AND offer_id IN (SELECT value FROM json_each(?)) ORDER BY subject`),
+        lastInGroup: db.prepare('SELECT MAX(updated_at) AS t FROM deal_votes WHERE subject = ? AND offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb))'),
+        sameIp: db.prepare(`SELECT DISTINCT subject FROM deal_votes WHERE ip_hash = ? AND value <> 0 AND offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) ORDER BY subject`),
         covote: db.prepare(`SELECT b.subject AS other, COUNT(DISTINCT a.offer_id) AS n
                               FROM deal_votes a JOIN deal_votes b
                                 ON b.offer_id = a.offer_id AND b.subject <> a.subject AND b.value = a.value AND a.value <> 0
                                AND ABS(a.updated_at - b.updated_at) <= @win
-                             WHERE a.subject = @s GROUP BY b.subject HAVING n >= @min ORDER BY b.subject`),
+                             WHERE a.subject = @s GROUP BY b.subject HAVING COUNT(DISTINCT a.offer_id) >= @min ORDER BY b.subject`),
     };
 
-    function weightFor(subject, now = store.now()) {
+    async function weightFor(subject, now = store.now()) {
         const minted = subjectTime(subject);
-        const seen = people.firstSeen(subject);
+        const seen = await people.firstSeen(subject);
         const evidence = Math.max(minted != null ? now - minted : 0, seen != null ? now - seen : 0);
         return evidence >= config.abuse.newAccountDays * DAY ? 1 : config.abuse.newAccountWeight;
     }
 
-    function detectRings(root, ids, subject, ipHash) {
+    async function detectRings(root, ids, subject, ipHash) {
         const raised = [];
         if (ipHash) {
-            const subjects = q.sameIp.all(ipHash, JSON.stringify(ids)).map((r) => r.subject);
+            const subjects = (await q.sameIp.all(ipHash, JSON.stringify(ids))).map((r) => r.subject);
             if (subjects.length >= config.abuse.ringIpMin) {
-                raised.push(flags.raise({
+                raised.push(await flags.raise({
                     kind: 'vote_ring', offerId: root.id, key: `ring:ip:${root.id}:${ipHash}`, reason: 'shared_ip',
                     details: { signal: 'shared_ip', ip_hash: ipHash, voters: subjects },
                 }));
             }
         }
-        const partners = q.covote.all({ s: subject, win: config.abuse.ringWindowMs, min: config.abuse.ringCovoteMin });
+        const partners = await q.covote.all({ s: subject, win: config.abuse.ringWindowMs, min: config.abuse.ringCovoteMin });
         if (partners.length) {
             const voters = [subject, ...partners.map((p) => p.other)].sort();
             const key = `ring:covote:${crypto.createHash('sha256').update(voters.join(',')).digest('hex').slice(0, 20)}`;
-            raised.push(flags.raise({
+            raised.push(await flags.raise({
                 kind: 'vote_ring', offerId: root.id, key, reason: 'covote',
                 details: { signal: 'covote', voters, shared_offers: Object.fromEntries(partners.map((p) => [p.other, p.n])), window_minutes: config.abuse.ringWindowMs / 60000 },
             }));
@@ -80,36 +80,36 @@ function createVotes({ config, store, reads, hotness, limits, flags, people, out
     }
 
     /** value: 1 | -1 (set) or 0 (remove). */
-    function apply(viewer, idOrSlug, value, { ip = null, traceparent } = {}) {
+    async function apply(viewer, idOrSlug, value, { ip = null, traceparent } = {}) {
         const subject = viewer && viewer.subject;
         if (!subject) throw new ApiError(401, 'auth.required', 'Sign in to vote');
         if (![1, -1, 0].includes(value)) throw new ApiError(422, 'request.invalid', 'value must be 1 or -1');
-        const listing = reads.mustFind(idOrSlug);
-        const root = reads.root(listing);
+        const listing = await reads.mustFind(idOrSlug);
+        const root = await reads.root(listing);
         if (root.status === 'disabled') throw new ApiError(409, 'offer.disabled', 'This deal was removed by moderators');
-        const ids = reads.groupIds(root.id);
-        if (ids.some((id) => { const o = reads.get(id); return o && o.submitted_by === subject; })) {
+        const ids = await reads.groupIds(root.id);
+        if ((await Promise.all(ids.map(async (id) => await reads.get(id)))).some((o) => o && o.submitted_by === subject)) {
             throw new ApiError(403, 'vote.own_offer', 'You cannot vote on a deal you posted');
         }
         const ipHash = limits.ipHash(ip);
-        return store.tx(() => {
-            const current = reads.effectiveVotes(ids).get(subject);
+        return await store.tx(async () => {
+            const current = (await reads.effectiveVotes(ids)).get(subject);
             const previous = current ? current.value : 0;
-            if (previous === value) return { changed: false, value, previous, tally: reads.tally(ids), root };
-            limits.check('vote', subject, config.abuse.voteSubjectPerHour, 3600 * 1000, 'vote.rate_limited');
-            if (ipHash) limits.check('vote_ip', ipHash, config.abuse.voteIpPerHour, 3600 * 1000, 'vote.rate_limited');
-            limits.check('vote_offer', `${subject}:${root.id}`, config.abuse.voteOfferChangesPerHour, 3600 * 1000, 'vote.rate_limited');
+            if (previous === value) return { changed: false, value, previous, tally: await reads.tally(ids), root };
+            await limits.check('vote', subject, config.abuse.voteSubjectPerHour, 3600 * 1000, 'vote.rate_limited');
+            if (ipHash) await limits.check('vote_ip', ipHash, config.abuse.voteIpPerHour, 3600 * 1000, 'vote.rate_limited');
+            await limits.check('vote_offer', `${subject}:${root.id}`, config.abuse.voteOfferChangesPerHour, 3600 * 1000, 'vote.rate_limited');
             const now = store.now();
-            const last = q.lastInGroup.get(subject, JSON.stringify(ids)).t;
-            const weight = weightFor(subject, now);
+            const last = (await q.lastInGroup.get(subject, JSON.stringify(ids))).t;
+            const weight = await weightFor(subject, now);
             // updated_at strictly after the person's previous row in the group: "most recent" is exact.
-            q.upsert.run({ offer_id: root.id, subject, value, weight, ip_hash: ipHash, via: viewer.kind === 'service' ? 'service' : 'user', now, at: last != null && last >= now ? last + 1 : now });
-            limits.hit('vote', subject);
-            if (ipHash) limits.hit('vote_ip', ipHash);
-            limits.hit('vote_offer', `${subject}:${root.id}`);
-            const snap = hotness.snapshot(root.id, 'vote', now);
-            const tally = reads.tally(ids);
-            outbox.emit({
+            await q.upsert.run({ offer_id: root.id, subject, value, weight, ip_hash: ipHash, via: viewer.kind === 'service' ? 'service' : 'user', now, at: last != null && last >= now ? last + 1 : now });
+            await limits.hit('vote', subject);
+            if (ipHash) await limits.hit('vote_ip', ipHash);
+            await limits.hit('vote_offer', `${subject}:${root.id}`);
+            const snap = await hotness.snapshot(root.id, 'vote', now);
+            const tally = await reads.tally(ids);
+            await outbox.emit({
                 event_type: 'deals.vote.changed',
                 version: 1,
                 source: 'deals',
@@ -122,20 +122,20 @@ function createVotes({ config, store, reads, hotness, limits, flags, people, out
                     hotness: { formula: snap.formula, hot: snap.hot, score: snap.score },
                 },
             }, { traceparent });
-            const rings = value !== 0 ? detectRings(root, ids, subject, ipHash) : [];
+            const rings = value !== 0 ? await detectRings(root, ids, subject, ipHash) : [];
             return { changed: true, value, previous, weight, tally, hotness: snap, rings, root };
         });
     }
 
-    function mine(subject, root) {
+    async function mine(subject, root) {
         if (!subject || !root) return 0;
-        const v = reads.effectiveVotes(reads.groupIds(root.id)).get(subject);
+        const v = (await reads.effectiveVotes(await reads.groupIds(root.id))).get(subject);
         return v ? v.value : 0;
     }
 
     return {
-        set: (viewer, id, value, opts) => apply(viewer, id, Number(value), opts),
-        remove: (viewer, id, opts) => apply(viewer, id, 0, opts),
+        set: async (viewer, id, value, opts) => await apply(viewer, id, Number(value), opts),
+        remove: async (viewer, id, opts) => await apply(viewer, id, 0, opts),
         mine,
         weightFor,
     };

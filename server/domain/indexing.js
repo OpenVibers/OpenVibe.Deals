@@ -23,17 +23,17 @@ function actorRef(actor) {
 }
 
 function createIndexing({ store, publication, outbox, catalog }) {
-    const { sequencer } = store;
+    const { sequencer, db } = store;
 
     function latestPayload(v) {
         return v.latest ? { price: v.latest.price, currency: v.latest.currency, availability: v.latest.availability, observed_at: iso(v.latest.observed_at) } : null;
     }
 
     /** deals.offer.* for the canonical offer. */
-    function emitOffer(type, offer, { actor = null, extra = {}, traceparent } = {}) {
-        const v = publication.offerView(offer);
+    async function emitOffer(type, offer, { actor = null, extra = {}, traceparent } = {}) {
+        const v = await publication.offerView(offer);
         const r = v.root;
-        return outbox.emit({
+        return await outbox.emit({
             event_type: type,
             version: 1,
             source: 'deals',
@@ -50,9 +50,9 @@ function createIndexing({ store, publication, outbox, catalog }) {
         }, { traceparent });
     }
 
-    function emitIfNew(doc, before) {
+    async function emitIfNew(doc, before) {
         if (before != null && doc.revision === before) return null;
-        return outbox.emit(hooks.indexEvent({ document: doc, now: store.now() }));
+        return await outbox.emit(hooks.indexEvent({ document: doc, now: store.now() }));
     }
 
     function offerDocument(v) {
@@ -81,21 +81,21 @@ function createIndexing({ store, publication, outbox, catalog }) {
         });
     }
 
-    function indexOffer(offer) {
+    async function indexOffer(offer) {
         if (!offer) return null;
         if (offer.merged_into) {
-            const before = sequencer.current('deals', 'offer', offer.id);
-            return emitIfNew(sequencer.stamp(hooks.tombstone({ owner: 'deals', type: 'offer', id: offer.id, revision: 0 })), before);
+            const before = await sequencer.current('deals', 'offer', offer.id);
+            return await emitIfNew(await sequencer.stamp(db, hooks.tombstone({ owner: 'deals', type: 'offer', id: offer.id, revision: 0 })), before);
         }
-        const v = publication.offerView(offer);
-        const before = sequencer.current('deals', 'offer', v.root.id);
-        return emitIfNew(sequencer.stamp(offerDocument(v)), before);
+        const v = await publication.offerView(offer);
+        const before = await sequencer.current('deals', 'offer', v.root.id);
+        return await emitIfNew(await sequencer.stamp(db, offerDocument(v)), before);
     }
 
-    function indexProduct(product) {
+    async function indexProduct(product) {
         if (!product) return null;
-        const pv = publication.productView(product);
-        const before = sequencer.current('deals', 'product', product.id);
+        const pv = await publication.productView(product);
+        const before = await sequencer.current('deals', 'product', product.id);
         const lines = pv.offers.filter((v) => v.root.status === 'active').slice(0, 20).map((v) => `${v.root.title}${v.latest && v.latest.price != null ? ` — ${v.latest.price} ${v.latest.currency || ''} as of ${iso(v.latest.observed_at)}` : ''}`);
         const doc = hooks.buildIndexDocument({
             owner: 'deals', type: 'product', id: product.id, revision: 0, state: 'published', visibility: 'public',
@@ -108,13 +108,13 @@ function createIndexing({ store, publication, outbox, catalog }) {
             publishedAt: product.created_at,
             updatedAt: pv.freshestObservedAt || product.updated_at,
         });
-        return emitIfNew(sequencer.stamp(doc), before);
+        return await emitIfNew(await sequencer.stamp(db, doc), before);
     }
 
     /** After any change to an offer: its index document and its product's. */
-    function reindex(offer) {
-        indexOffer(offer);
-        if (offer && offer.product_id) indexProduct(catalog.product(offer.product_id));
+    async function reindex(offer) {
+        await indexOffer(offer);
+        if (offer && offer.product_id) await indexProduct(await catalog.product(offer.product_id));
     }
 
     return { emitOffer, indexOffer, indexProduct, reindex, actorRef, offerDocument };

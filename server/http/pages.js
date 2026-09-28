@@ -105,14 +105,14 @@ function createPages(ctx) {
 
     // ── lists ───────────────────────────────────────────────
 
-    function listPage(req, res, kind) {
+    async function listPage(req, res, kind) {
         const page = pageNumber(req);
         const path = kind === 'hot' ? '/' : '/new';
-        const total = listings.countActive();
+        const total = await listings.countActive();
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
-        const rows = kind === 'hot' ? listings.hot(PER_PAGE, pager.offset) : listings.newest(PER_PAGE, pager.offset);
-        const list = rows.map((o) => publication.offerView(o));
+        const rows = kind === 'hot' ? await listings.hot(PER_PAGE, pager.offset) : await listings.newest(PER_PAGE, pager.offset);
+        const list = await Promise.all(rows.map(async (o) => await publication.offerView(o)));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         send(req, res, 200, {
             title: kind === 'hot' ? 'Hot deals' : 'New deals',
@@ -132,14 +132,14 @@ function createPages(ctx) {
         }, { cacheable: true });
     }
 
-    router.get('/', wrap(async (req, res) => listPage(req, res, 'hot')));
+    router.get('/', wrap(async (req, res) => await listPage(req, res, 'hot')));
     // What shipped on OpenVibe.Deals: the shared update log every OpenVibe site has.
     router.get('/updates', (req, res) => send(req, res, 200, {
         title: 'What shipped on OpenVibe.Deals', description: 'Every change deployed to OpenVibe.Deals, newest first.',
         decision: pageDecision('/updates'), canonical: `${config.baseUrl}/updates`,
         body: frame.updatesBody({ service: 'deals', siteName: 'OpenVibe.Deals' }) + `<script src="${ovServe.url('shipped.js')}" defer></script>`,
     }, { cacheable: true }));
-    router.get('/new', wrap(async (req, res) => listPage(req, res, 'new')));
+    router.get('/new', wrap(async (req, res) => await listPage(req, res, 'new')));
 
     // ── offers ──────────────────────────────────────────────
 
@@ -157,7 +157,7 @@ function createPages(ctx) {
     }
 
     async function renderOffer(req, res, offer, { json = false } = {}) {
-        const v = publication.offerView(offer);
+        const v = await publication.offerView(offer);
         const r = v.root;
         const dto = publication.offerDto(v);
         if (r.status === 'disabled') {
@@ -168,7 +168,7 @@ function createPages(ctx) {
         const c = r.status === 'disabled' ? { state: 'off' } : await readComments(r, r.title, req);
         const mergedComments = [];
         for (const m of v.members.slice(0, 3)) {
-            const tid = community.enabled ? community.knownThread(m) : null;
+            const tid = community.enabled ? await community.knownThread(m) : null;
             if (!tid) continue;
             try { const data = await community.readThread(tid, { ctx: req.ov }); mergedComments.push({ title: m.title, comments: { state: 'ok', comments: data.comments || [] } }); } catch { mergedComments.push({ title: m.title, comments: { state: 'unavailable' } }); }
         }
@@ -182,21 +182,21 @@ function createPages(ctx) {
             type: 'website',
             jsonLd: [publication.offerJsonLd(v), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, ...(v.store ? [{ name: v.store.name || v.store.domain, url: publication.abs(publication.storePath(v.store)) }] : []), { name: r.title, url: canonical }])],
             body: views.offerPage({
-                v, dto, viewer: req.viewer, csrf: csrf(req), myVote: signedIn(req) ? votes.mine(req.viewer.subject, r) : 0,
+                v, dto, viewer: req.viewer, csrf: csrf(req), myVote: signedIn(req) ? await votes.mine(req.viewer.subject, r) : 0,
                 comments: c, mergedComments, canEdit: access.canEdit(req.viewer, r), isMod,
-                log: isMod ? offers.moderationLog(r) : null, flags: isMod ? flags.forOffer(v.ids).map(flags.dto) : null, urls,
+                log: isMod ? await offers.moderationLog(r) : null, flags: isMod ? await Promise.all((await flags.forOffer(v.ids)).map(flags.dto)) : null, urls,
                 notice: req.query.done ? { text: { vote: 'Your vote is recorded.', observe: 'Thanks — your observation is recorded with the time you saw it.', flag: 'Thanks — moderators will look at your report.', expire: 'Marked expired.', comment: 'Comment posted.', moderated: 'Done.' }[req.query.done] || 'Done.' } : null,
             }),
         }, { cacheable: true });
     }
 
-    function offerFor(req, res) {
+    async function offerFor(req, res) {
         const slug = String(req.params.slug || '');
         const json = slug.endsWith('.json');
-        const offer = reads.find(json ? slug.slice(0, -5) : slug);
+        const offer = await reads.find(json ? slug.slice(0, -5) : slug);
         if (!offer) { notFound(req, res); return null; }
         if (offer.merged_into) {
-            const root = reads.root(offer);
+            const root = await reads.root(offer);
             res.set('Cache-Control', 'public, max-age=300');
             res.redirect(301, `${publication.offerPath(root)}${json ? '.json' : ''}`);
             return null;
@@ -205,38 +205,38 @@ function createPages(ctx) {
     }
 
     router.get('/d/:slug', wrap(async (req, res) => {
-        const f = offerFor(req, res);
+        const f = await offerFor(req, res);
         if (f) await renderOffer(req, res, f.offer, { json: f.json });
     }));
 
     const back = (req) => `/d/${encodeURIComponent(req.params.slug)}`;
     const ip = (req) => req.ip || null;
 
-    router.post('/d/:slug/vote', B('deals.vote'), form, wrap(async (req, res) => act(req, res, back(req), () => {
+    router.post('/d/:slug/vote', B('deals.vote'), form, wrap(async (req, res) => await act(req, res, back(req), async () => {
         const value = { up: 1, down: -1, remove: 0 }[String(req.body.value || '')];
         if (value === undefined) throw new ApiError(422, 'request.invalid', 'Choose hot, cold or remove');
-        if (value === 0) votes.remove(req.viewer, req.params.slug, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
-        else votes.set(req.viewer, req.params.slug, value, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
+        if (value === 0) await votes.remove(req.viewer, req.params.slug, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
+        else await votes.set(req.viewer, req.params.slug, value, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
         return `${back(req)}?done=vote`;
     })));
 
-    router.post('/d/:slug/observe', B('deals.offer.observe'), form, wrap(async (req, res) => act(req, res, back(req), () => {
-        offers.observe(req.viewer, req.params.slug, req.body, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
+    router.post('/d/:slug/observe', B('deals.offer.observe'), form, wrap(async (req, res) => await act(req, res, back(req), async () => {
+        await offers.observe(req.viewer, req.params.slug, req.body, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
         return `${back(req)}?done=observe#history`;
     })));
 
-    router.post('/d/:slug/flag', B('deals.flag.create'), form, wrap(async (req, res) => act(req, res, back(req), () => {
-        flags.report(req.viewer, req.params.slug, req.body, { ip: ip(req) });
+    router.post('/d/:slug/flag', B('deals.flag.create'), form, wrap(async (req, res) => await act(req, res, back(req), async () => {
+        await flags.report(req.viewer, req.params.slug, req.body, { ip: ip(req) });
         return `${back(req)}?done=flag`;
     })));
 
-    router.post('/d/:slug/expire', B('deals.offer.update'), form, wrap(async (req, res) => act(req, res, back(req), () => {
-        offers.expire(req.viewer, req.params.slug, {}, { traceparent: req.ov && req.ov.traceparent });
+    router.post('/d/:slug/expire', B('deals.offer.update'), form, wrap(async (req, res) => await act(req, res, back(req), async () => {
+        await offers.expire(req.viewer, req.params.slug, {}, { traceparent: req.ov && req.ov.traceparent });
         return `${back(req)}?done=expire`;
     })));
 
-    router.post('/d/:slug/comments', B('deals.comment.create'), form, wrap(async (req, res) => act(req, res, back(req), async () => {
-        const root = reads.root(reads.mustFind(req.params.slug));
+    router.post('/d/:slug/comments', B('deals.comment.create'), form, wrap(async (req, res) => await act(req, res, back(req), async () => {
+        const root = await reads.root(await reads.mustFind(req.params.slug));
         if (root.status === 'disabled') throw new ApiError(409, 'offer.disabled', 'This deal was removed');
         const message = String(req.body.message || '').trim().slice(0, 4000);
         if (!message) return `${back(req)}#comments`;
@@ -255,9 +255,9 @@ function createPages(ctx) {
     router.get('/p/:slug', wrap(async (req, res) => {
         const slug = String(req.params.slug || '');
         const json = slug.endsWith('.json');
-        const product = catalog.productBySlug(json ? slug.slice(0, -5) : slug);
+        const product = await catalog.productBySlug(json ? slug.slice(0, -5) : slug);
         if (!product) return notFound(req, res);
-        const pv = publication.productView(product);
+        const pv = await publication.productView(product);
         if (json) {
             return sendJson(req, res, 200, {
                 product: { id: product.id, slug: product.slug, name: product.name, brand: product.brand, category: product.category, url: publication.abs(publication.productPath(product)), aliases: pv.aliases.map((a) => ({ kind: a.kind, value: a.value })) },
@@ -276,13 +276,13 @@ function createPages(ctx) {
     }));
 
     router.get('/s/:domain', wrap(async (req, res) => {
-        const st = catalog.storeByDomain(req.params.domain);
+        const st = await catalog.storeByDomain(req.params.domain);
         if (!st) return notFound(req, res);
         const path = publication.storePath(st);
-        const total = listings.countStore(st.id);
+        const total = await listings.countStore(st.id);
         const pager = ssr.paginate({ page: pageNumber(req), perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
-        const list = listings.byStore(st.id, PER_PAGE, pager.offset).map((o) => publication.offerView(o));
+        const list = await Promise.all((await listings.byStore(st.id, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         send(req, res, 200, {
             title: `Deals at ${st.name || st.domain}`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
@@ -296,12 +296,12 @@ function createPages(ctx) {
     router.get('/search', wrap(async (req, res) => {
         const q = String(req.query.q || '').slice(0, 200);
         const page = pageNumber(req);
-        const r = q ? listings.search(q, { limit: PER_PAGE, offset: (page - 1) * PER_PAGE }) : { total: 0, rows: [] };
+        const r = q ? await listings.search(q, { limit: PER_PAGE, offset: (page - 1) * PER_PAGE }) : { total: 0, rows: [] };
         const pager = q ? ssr.paginate({ page, perPage: PER_PAGE, total: r.total, href: (p) => `/search?q=${encodeURIComponent(q)}&page=${p}` }) : null;
         send(req, res, 200, {
             title: q ? `Search: ${q}` : 'Search deals',
             decision: pageDecision('/search', { indexable: false }),
-            body: views.searchPage({ q, results: r.rows.map((o) => publication.offerView(o)), pager, urls, csrf: csrf(req), signedIn: signedIn(req) }),
+            body: views.searchPage({ q, results: await Promise.all(r.rows.map(async (o) => await publication.offerView(o))), pager, urls, csrf: csrf(req), signedIn: signedIn(req) }),
         });
     }));
 
@@ -325,7 +325,7 @@ function createPages(ctx) {
             product: b.product_name || b.product_gtin ? { name: b.product_name, gtin: b.product_gtin } : null,
         };
         try {
-            const { offer } = offers.submit(req.viewer, input, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
+            const { offer } = await offers.submit(req.viewer, input, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
             res.redirect(303, publication.offerPath(offer));
         } catch (err) {
             if (!(err instanceof ApiError)) throw err;
@@ -336,30 +336,30 @@ function createPages(ctx) {
 
     // ── watches ─────────────────────────────────────────────
 
-    function watchesPage(req, res, status = 200, { error, notice } = {}) {
-        const list = watches.list(req.viewer.subject).map(watches.dto);
+    async function watchesPage(req, res, status = 200, { error, notice } = {}) {
+        const list = await Promise.all((await watches.list(req.viewer.subject)).map(watches.dto));
         send(req, res, status, { title: 'Watches', decision: pageDecision('/watches', { indexable: false }), body: views.watchesPage({ csrf: csrf(req), watches: list, error, notice, urls }) });
     }
 
     router.get('/watches', wrap(async (req, res) => {
         if (!signedIn(req)) return send(req, res, 200, { title: 'Watches', decision: pageDecision('/watches', { indexable: false }), body: views.message({ heading: 'Watches', text: 'Sign in to watch keywords, products and prices, and to save searches.', action: { href: '/auth/login?next=%2Fwatches', label: 'Sign in' } }) });
-        watchesPage(req, res);
+        await watchesPage(req, res);
     }));
 
     router.post('/watches', B('deals.watch'), form, wrap(async (req, res) => {
         if (!formGuard(req, res, '/watches')) return;
         try {
             const b = req.body || {};
-            watches.create(req.viewer.subject, { kind: b.kind, query: b.query, product: b.product || null, max_price: b.max_price, currency: b.currency, label: b.label });
+            await watches.create(req.viewer.subject, { kind: b.kind, query: b.query, product: b.product || null, max_price: b.max_price, currency: b.currency, label: b.label });
             res.redirect(303, '/watches');
         } catch (err) {
             if (!(err instanceof ApiError)) throw err;
-            watchesPage(req, res, err.status, { error: err.message });
+            await watchesPage(req, res, err.status, { error: err.message });
         }
     }));
 
-    router.post('/watches/:id/delete', B('deals.watch'), form, wrap(async (req, res) => act(req, res, '/watches', () => {
-        watches.remove(req.viewer.subject, req.params.id);
+    router.post('/watches/:id/delete', B('deals.watch'), form, wrap(async (req, res) => await act(req, res, '/watches', async () => {
+        await watches.remove(req.viewer.subject, req.params.id);
         return '/watches';
     })));
 
@@ -373,62 +373,62 @@ function createPages(ctx) {
 
     router.get('/mod', wrap(async (req, res) => {
         if (!modGuard(req, res)) return;
-        const dups = listings.possibleDuplicates().map((d) => ({ a: reads.get(d.a), b: reads.get(d.b) }));
+        const dups = await Promise.all((await listings.possibleDuplicates()).map(async (d) => ({ a: await reads.get(d.a), b: await reads.get(d.b) })));
         send(req, res, 200, {
             title: 'Moderation', decision: pageDecision('/mod', { indexable: false }),
-            body: views.modPage({ csrf: csrf(req), flags: flags.list({ status: 'open' }).map(flags.dto), pending: listings.pendingReview(), duplicates: dups, urls }),
+            body: views.modPage({ csrf: csrf(req), flags: await Promise.all((await flags.list({ status: 'open' })).map(flags.dto)), pending: await listings.pendingReview(), duplicates: dups, urls }),
         });
     }));
 
     router.post('/mod/offers/:slug/:action', B('deals.offer.moderate'), form, wrap(async (req, res) => {
         if (!modGuard(req, res)) return;
         const tp = { traceparent: req.ov && req.ov.traceparent };
-        await act(req, res, `/d/${encodeURIComponent(req.params.slug)}`, () => {
+        await act(req, res, `/d/${encodeURIComponent(req.params.slug)}`, async () => {
             const b = req.body || {};
             switch (req.params.action) {
-                case 'merge': { const out = offers.merge(req.viewer, req.params.slug, b.into, { reason: b.reason }, tp); return `${publication.offerPath(out.offer)}?done=moderated`; }
-                case 'unmerge': { const out = offers.unmerge(req.viewer, req.params.slug, { reason: b.reason }, tp); return `${publication.offerPath(out.offer)}?done=moderated`; }
-                case 'disable': offers.disable(req.viewer, req.params.slug, { reason: b.reason }, tp); return '/mod';
-                case 'enable': offers.enable(req.viewer, req.params.slug, { reason: b.reason }, tp); break;
-                case 'review': offers.review(req.viewer, req.params.slug, { note: b.note }, tp); break;
-                case 'expire': offers.expire(req.viewer, req.params.slug, { reason: b.reason }, tp); break;
+                case 'merge': { const out = await offers.merge(req.viewer, req.params.slug, b.into, { reason: b.reason }, tp); return `${publication.offerPath(out.offer)}?done=moderated`; }
+                case 'unmerge': { const out = await offers.unmerge(req.viewer, req.params.slug, { reason: b.reason }, tp); return `${publication.offerPath(out.offer)}?done=moderated`; }
+                case 'disable': await offers.disable(req.viewer, req.params.slug, { reason: b.reason }, tp); return '/mod';
+                case 'enable': await offers.enable(req.viewer, req.params.slug, { reason: b.reason }, tp); break;
+                case 'review': await offers.review(req.viewer, req.params.slug, { note: b.note }, tp); break;
+                case 'expire': await offers.expire(req.viewer, req.params.slug, { reason: b.reason }, tp); break;
                 default: throw new ApiError(404, 'route.not_found', 'No such action');
             }
-            return `/d/${encodeURIComponent(reads.root(reads.mustFind(req.params.slug)).slug)}?done=moderated`;
+            return `/d/${encodeURIComponent((await reads.root(await reads.mustFind(req.params.slug))).slug)}?done=moderated`;
         });
     }));
 
     router.post('/mod/flags/:id/:action', B('deals.offer.moderate'), form, wrap(async (req, res) => {
         if (!modGuard(req, res)) return;
-        await act(req, res, '/mod', () => {
+        await act(req, res, '/mod', async () => {
             const status = { resolve: 'resolved', dismiss: 'dismissed' }[req.params.action];
             if (!status) throw new ApiError(404, 'route.not_found', 'No such action');
-            flags.resolve(req.viewer, req.params.id, { status, resolution: req.body.resolution }, { traceparent: req.ov && req.ov.traceparent });
+            await flags.resolve(req.viewer, req.params.id, { status, resolution: req.body.resolution }, { traceparent: req.ov && req.ov.traceparent });
             return '/mod';
         });
     }));
 
     // ── feeds (never viewer-dependent) ──────────────────────
 
-    function feedItems() {
-        return listings.newest(50, 0).map((o) => {
-            const v = publication.offerView(o);
+    async function feedItems() {
+        return Promise.all((await listings.newest(50, 0)).map(async (o) => {
+            const v = await publication.offerView(o);
             const price = `${views.priceText(v.latest)}${v.latest ? ` as of ${iso(v.latest.observed_at)}` : ''}`;
             return {
                 id: `deals:offer:${o.id}`, url: publication.abs(publication.offerPath(o)), title: o.title,
                 summary: `${price}${v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${o.description ? ` ${o.description.slice(0, 300)}` : ''}`,
                 published: o.created_at, updated: Math.max(o.updated_at, v.latest ? v.latest.observed_at : 0), decision: v.decision,
             };
-        });
+        }));
     }
     const channel = () => ({ title: 'OpenVibe.Deals — new deals', link: publication.abs('/new'), description: 'New deals, each with its source and the time its price was observed.', language: 'en' });
 
-    router.get('/feed.xml', (_req, res) => res.type('application/rss+xml').set('Cache-Control', 'public, max-age=300').send(seo.rssFeed({ ...channel(), feedUrl: publication.abs('/feed.xml') }, feedItems())));
-    router.get('/atom.xml', (_req, res) => {
-        const items = feedItems();
+    router.get('/feed.xml', async (_req, res) => res.type('application/rss+xml').set('Cache-Control', 'public, max-age=300').send(seo.rssFeed({ ...channel(), feedUrl: publication.abs('/feed.xml') }, await feedItems())));
+    router.get('/atom.xml', async (_req, res) => {
+        const items = await feedItems();
         res.type('application/atom+xml').set('Cache-Control', 'public, max-age=300').send(seo.atomFeed({ ...channel(), feedUrl: publication.abs('/atom.xml'), ...(items.length ? {} : { updated: store.now() }) }, items));
     });
-    router.get('/feed.json', (_req, res) => res.type('application/feed+json').set('Cache-Control', 'public, max-age=300').send(JSON.stringify(seo.jsonFeed({ ...channel(), feedUrl: publication.abs('/feed.json') }, feedItems()))));
+    router.get('/feed.json', async (_req, res) => res.type('application/feed+json').set('Cache-Control', 'public, max-age=300').send(JSON.stringify(seo.jsonFeed({ ...channel(), feedUrl: publication.abs('/feed.json') }, await feedItems()))));
 
     return { router, notFound, messagePage };
 }

@@ -134,7 +134,7 @@ const { boot, check, done } = require('./helpers/boot');
     });
 
     await check('every event validates as events.event-envelope@1; every Search document as search.index-document@1', async () => {
-        const all = t.events();
+        const all = await t.events();
         assert.ok(all.length > 10);
         const types = new Set();
         for (const e of all) {

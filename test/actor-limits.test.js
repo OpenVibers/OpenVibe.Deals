@@ -54,16 +54,16 @@ const { actor, serviceItself } = require('../server/http/actor-limits');
 
     await check('a write has its own budget (30 watch changes a minute), shared by the API and the form; nothing stored past it', async () => {
         clock = Date.UTC(2026, 8, 27, 12, 5, 0);
-        const stored = (u) => t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_watches WHERE subject = ?').get(u.subject).n;
+        const stored = async (u) => (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_watches WHERE subject = ?').get(u.subject)).n;
         for (let i = 0; i < 30; i++) {
             const r = await t.get('/api/v1/watches', { as: ann, json: { kind: 'keyword', query: `thing ${i}` } });
             assert.strictEqual(r.status, 201, `watch ${i + 1}: ${r.text}`);
         }
-        const before = stored(ann);
+        const before = await stored(ann);
         const r = await t.get('/watches', { as: ann, form: { kind: 'keyword', query: 'one more' } });
         assert.deepStrictEqual([r.status, r.json().code, r.headers.get('retry-after')], [429, 'rate_limited', '60'], 'the form shares the API budget');
         assert.ok(r.json().detail.includes('deals.watch'), r.json().detail);
-        assert.strictEqual(stored(ann), before, 'nothing stored');
+        assert.strictEqual(await stored(ann), before, 'nothing stored');
         assert.strictEqual((await t.get('/api/v1/watches', { as: ben, json: { kind: 'keyword', query: 'mine' } })).status, 201, 'another person still writes');
     });
 

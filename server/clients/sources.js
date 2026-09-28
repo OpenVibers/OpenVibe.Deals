@@ -39,8 +39,8 @@ function createSources({ config, fetchImpl = globalThis.fetch }) {
 
     return {
         enabled,
-        items: ({ after = 0, limit = 100 } = {}, ctx) => call(`/api/v1/items?category=deals&after=${encodeURIComponent(after)}&limit=${encodeURIComponent(limit)}&include_removed=1`, ctx),
-        item: (id, ctx) => call(`/api/v1/items/${encodeURIComponent(id)}`, ctx),
+        items: async ({ after = 0, limit = 100 } = {}, ctx) => await call(`/api/v1/items?category=deals&after=${encodeURIComponent(after)}&limit=${encodeURIComponent(limit)}&include_removed=1`, ctx),
+        item: async (id, ctx) => await call(`/api/v1/items/${encodeURIComponent(id)}`, ctx),
     };
 }
 

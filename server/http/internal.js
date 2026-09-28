@@ -11,17 +11,16 @@
  */
 const express = require('express');
 const { http } = require('openvibe-contracts');
-const { verifyDeliveryV2, createInbox } = require('openvibe-sdk/events');
+const { verifyDeliveryV2, createPgInbox } = require('openvibe-sdk/events');
 
 const CONSUMER = 'deals-sources';
 const TYPES = new Set(['sources.item.created', 'sources.item.updated', 'sources.item.removed']);
 
 function createInternalRoutes({ config, store, importer }) {
     const router = express.Router();
-    const inbox = createInbox(store.db, { now: store.now });
-    inbox.ensureSchema();
+    const inbox = createPgInbox(store.db, { now: store.now });   // idempotency_receipts: migrations/0001_initial.sql
 
-    router.post('/internal/events', express.raw({ type: () => true, limit: '256kb' }), (req, res) => {
+    router.post('/internal/events', express.raw({ type: () => true, limit: '256kb' }), async (req, res, next) => {
         const secrets = config.events.webhookSecrets;
         if (!secrets.length) return http.sendProblem(res, 503, 'deals.webhook_disabled', { detail: 'DEALS_EVENTS_SECRET is not set', ctx: req.ov });
         const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
@@ -33,12 +32,15 @@ function createInternalRoutes({ config, store, importer }) {
         if (!event || typeof event.event_id !== 'string' || !/^evt_[0-9A-HJKMNP-TV-Z]{26}$/.test(event.event_id)) {
             return http.sendProblem(res, 400, 'deals.bad_delivery', { detail: 'body must be { event: <envelope>, seq }', ctx: req.ov });
         }
-        const r = inbox.once(CONSUMER, event.event_id, () => {
-            if (!TYPES.has(event.event_type) || event.source !== 'sources') return 'ignored';
-            const category = event.payload && event.payload.category;
-            if (category !== 'deals') return 'ignored';
-            return 'import_scheduled';
-        });
+        let r;
+        try {
+            r = await inbox.once(CONSUMER, event.event_id, async () => {
+                if (!TYPES.has(event.event_type) || event.source !== 'sources') return 'ignored';
+                const category = event.payload && event.payload.category;
+                if (category !== 'deals') return 'ignored';
+                return 'import_scheduled';
+            });
+        } catch (err) { return next(err); }
         if (!r.duplicate && r.result === 'import_scheduled') importer.kick();
         res.status(200).json({ event_id: event.event_id, duplicate: Boolean(r.duplicate), outcome: r.duplicate ? null : r.result });
     });

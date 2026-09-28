@@ -35,22 +35,22 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
                             VALUES (@id, @subject, @kind, @query, @product_id, @max_price, @max_price_num, @currency, @notify, @label, @now)`),
         remove: db.prepare('UPDATE deal_watches SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL'),
         active: db.prepare("SELECT * FROM deal_watches WHERE notify = 1 AND deleted_at IS NULL AND kind <> 'search'"),
-        claim: db.prepare(`INSERT OR IGNORE INTO watch_notifications (watch_id, observation_id, offer_id, price_num, currency, created_at) VALUES (?, ?, ?, ?, ?, ?)`),
+        claim: db.prepare(`INSERT INTO watch_notifications (watch_id, observation_id, offer_id, price_num, currency, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`),
         setEvent: db.prepare('UPDATE watch_notifications SET event_id = ? WHERE watch_id = ? AND observation_id = ?'),
         priorForGroup: db.prepare(`SELECT price_num, currency FROM watch_notifications
-                                   WHERE watch_id = ? AND offer_id IN (SELECT value FROM json_each(?)) AND event_id IS NOT NULL`),
+                                   WHERE watch_id = ? AND offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) AND event_id IS NOT NULL`),
         notifications: db.prepare('SELECT COUNT(*) AS n FROM watch_notifications WHERE watch_id = ? AND event_id IS NOT NULL'),
     };
 
-    function create(subject, input) {
+    async function create(subject, input) {
         if (!subject) throw new ApiError(401, 'auth.required', 'Sign in to save watches');
         const kind = String(input.kind || '');
         if (!KINDS.includes(kind)) throw new ApiError(422, 'request.invalid', `kind must be one of ${KINDS.join(', ')}`);
-        if (q.countFor.get(subject).n >= config.abuse.watchesPerSubject) throw new ApiError(429, 'watch.limit', `At most ${config.abuse.watchesPerSubject} watches and saved searches`);
+        if ((await q.countFor.get(subject)).n >= config.abuse.watchesPerSubject) throw new ApiError(429, 'watch.limit', `At most ${config.abuse.watchesPerSubject} watches and saved searches`);
         const query = text(input.query, { field: 'query', max: 200 });
         let product = null;
         if (input.product) {
-            product = catalog.productBySlug(input.product) || catalog.product(input.product);
+            product = await catalog.productBySlug(input.product) || await catalog.product(input.product);
             if (!product) throw new ApiError(404, 'product.not_found', 'No such product');
         }
         const row = { id: newId('dwt'), subject, kind, query: null, product_id: null, max_price: null, max_price_num: null, currency: null, notify: kind === 'search' ? 0 : 1, label: text(input.label, { max: 120 }), now: store.now() };
@@ -67,14 +67,14 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
             if (!product && !(query && tokens(query).length)) throw new ApiError(422, 'request.invalid', 'a price watch needs a product or keywords');
             Object.assign(row, { product_id: product ? product.id : null, query: product ? null : query, max_price: amount.text, max_price_num: amount.num, currency });
         }
-        q.insert.run(row);
-        return q.get.get(row.id);
+        await q.insert.run(row);
+        return await q.get.get(row.id);
     }
 
-    function remove(subject, id, { staff = false } = {}) {
-        const w = q.get.get(String(id || ''));
+    async function remove(subject, id, { staff = false } = {}) {
+        const w = await q.get.get(String(id || ''));
         if (!w || w.deleted_at || (w.subject !== subject && !staff)) throw new ApiError(404, 'watch.not_found', 'No such watch');
-        q.remove.run(store.now(), w.id);
+        await q.remove.run(store.now(), w.id);
         return { id: w.id, deleted: true };
     }
 
@@ -95,23 +95,23 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
     }
 
     /** Inside the observation's transaction. Returns the envelopes emitted. */
-    function onObservation(obs) {
-        const offer = reads.get(obs.offer_id);
-        const v = publication.offerView(offer);
+    async function onObservation(obs) {
+        const offer = await reads.get(obs.offer_id);
+        const v = await publication.offerView(offer);
         if (v.root.status !== 'active') return [];
         if (store.now() - obs.observed_at > config.freshnessMs) return [];
         const words = offerText(v);
         const out = [];
-        for (const w of q.active.all()) {
+        for (const w of await q.active.all()) {
             if (obs.observed_by && obs.observed_by === w.subject) continue;
             if (v.root.submitted_by && v.root.submitted_by === w.subject && obs.origin === 'community') continue;
             if (!matches(w, v, obs, words)) continue;
-            const prior = q.priorForGroup.all(w.id, JSON.stringify(v.ids));
+            const prior = await q.priorForGroup.all(w.id, JSON.stringify(v.ids));
             if (w.kind !== 'price_below' && prior.length) continue;
             if (w.kind === 'price_below' && prior.some((p) => p.currency === obs.currency && p.price_num != null && p.price_num <= obs.price_num)) continue;
             // The uniqueness: at most one row, hence one event, per (watch, observation).
-            if (q.claim.run(w.id, obs.id, v.root.id, obs.price_num, obs.currency, store.now()).changes === 0) continue;
-            const env = outbox.emit({
+            if ((await q.claim.run(w.id, obs.id, v.root.id, obs.price_num, obs.currency, store.now())).changes === 0) continue;
+            const env = await outbox.emit({
                 event_type: 'deals.watch.matched',
                 version: 1,
                 source: 'deals',
@@ -125,23 +125,23 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
                     observation: { id: obs.id, observed_at: iso(obs.observed_at), price: obs.price, currency: obs.currency, availability: obs.availability },
                 },
             });
-            q.setEvent.run(env.event_id, w.id, obs.id);
+            await q.setEvent.run(env.event_id, w.id, obs.id);
             out.push(env);
         }
         return out;
     }
 
-    function dto(w) {
-        const product = w.product_id ? catalog.product(w.product_id) : null;
+    async function dto(w) {
+        const product = w.product_id ? await catalog.product(w.product_id) : null;
         return {
             id: w.id, kind: w.kind, query: w.query, label: w.label, notify: Boolean(w.notify),
             product: product ? { id: product.id, slug: product.slug, name: product.name, url: publication.abs(publication.productPath(product)) } : null,
             max_price: w.max_price, currency: w.currency, created_at: iso(w.created_at),
-            notifications: q.notifications.get(w.id).n,
+            notifications: (await q.notifications.get(w.id)).n,
         };
     }
 
-    return { create, remove, onObservation, list: (subject) => q.listFor.all(subject), get: (id) => q.get.get(id), dto, KINDS };
+    return { create, remove, onObservation, list: async (subject) => await q.listFor.all(subject), get: async (id) => await q.get.get(id), dto, KINDS };
 }
 
 module.exports = { createWatches, KINDS };

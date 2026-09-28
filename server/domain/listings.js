@@ -15,8 +15,8 @@ function createListings({ store }) {
     const LATEST = 'h.id = (SELECT MAX(id) FROM deal_hotness_snapshots WHERE offer_id = o.id)';
     const q = {
         hot: db.prepare(`SELECT o.*, h.hot AS hot FROM deal_offers o LEFT JOIN deal_hotness_snapshots h ON ${LATEST}
-                         WHERE o.status = 'active' AND o.merged_into IS NULL ORDER BY COALESCE(h.hot, 0) DESC, o.created_at DESC, o.rowid DESC LIMIT ? OFFSET ?`),
-        newest: db.prepare(`SELECT o.* FROM deal_offers o WHERE o.status = 'active' AND o.merged_into IS NULL ORDER BY o.created_at DESC, o.rowid DESC LIMIT ? OFFSET ?`),
+                         WHERE o.status = 'active' AND o.merged_into IS NULL ORDER BY COALESCE(h.hot, 0) DESC, o.created_at DESC, o.seq DESC LIMIT ? OFFSET ?`),
+        newest: db.prepare(`SELECT o.* FROM deal_offers o WHERE o.status = 'active' AND o.merged_into IS NULL ORDER BY o.created_at DESC, o.seq DESC LIMIT ? OFFSET ?`),
         countActive: db.prepare("SELECT COUNT(*) AS n FROM deal_offers WHERE status = 'active' AND merged_into IS NULL"),
         byStore: db.prepare(`SELECT * FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
         countStore: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status <> 'disabled'`),
@@ -30,28 +30,28 @@ function createListings({ store }) {
         pendingReview: db.prepare(`SELECT * FROM deal_offers WHERE review_state = 'pending' AND merged_into IS NULL AND status <> 'disabled' ORDER BY created_at DESC LIMIT ?`),
     };
 
-    function search(query, { limit = 20, offset = 0, includeExpired = false } = {}) {
+    async function search(query, { limit = 20, offset = 0, includeExpired = false } = {}) {
         const words = [...new Set(tokens(query))].slice(0, 6);
         if (!words.length) return { total: 0, rows: [] };
         const where = words.map((_, i) => `(' ' || lower(o.title) || ' ' || lower(COALESCE(o.description, '')) || ' ') LIKE @w${i}`).join(' AND ');
         const params = Object.fromEntries(words.map((w, i) => [`w${i}`, `%${w.replace(/[%_\\]/g, (c) => `\\${c}`)}%`]));
         const status = includeExpired ? "o.status <> 'disabled'" : "o.status = 'active'";
         const base = `FROM deal_offers o WHERE o.merged_into IS NULL AND ${status} AND ${where.replace(/LIKE (@w\d+)/g, "LIKE $1 ESCAPE '\\'")}`;
-        const total = db.prepare(`SELECT COUNT(*) AS n ${base}`).get(params).n;
-        const rows = db.prepare(`SELECT o.* ${base} ORDER BY o.created_at DESC LIMIT @limit OFFSET @offset`).all({ ...params, limit, offset });
+        const total = (await db.prepare(`SELECT COUNT(*) AS n ${base}`).get(params)).n;
+        const rows = await db.prepare(`SELECT o.* ${base} ORDER BY o.created_at DESC LIMIT @limit OFFSET @offset`).all({ ...params, limit, offset });
         return { total, rows, words };
     }
 
     return {
-        hot: (limit, offset) => q.hot.all(limit, offset),
-        newest: (limit, offset) => q.newest.all(limit, offset),
-        countActive: () => q.countActive.get().n,
-        byStore: (storeId, limit, offset) => q.byStore.all(storeId, limit, offset),
-        countStore: (storeId) => q.countStore.get(storeId).n,
-        indexable: () => q.indexable.all(),
-        products: () => q.products.all(),
-        possibleDuplicates: (limit = 50) => q.duplicates.all(limit),
-        pendingReview: (limit = 50) => q.pendingReview.all(limit),
+        hot: async (limit, offset) => await q.hot.all(limit, offset),
+        newest: async (limit, offset) => await q.newest.all(limit, offset),
+        countActive: async () => (await q.countActive.get()).n,
+        byStore: async (storeId, limit, offset) => await q.byStore.all(storeId, limit, offset),
+        countStore: async (storeId) => (await q.countStore.get(storeId)).n,
+        indexable: async () => await q.indexable.all(),
+        products: async () => await q.products.all(),
+        possibleDuplicates: async (limit = 50) => await q.duplicates.all(limit),
+        pendingReview: async (limit = 50) => await q.pendingReview.all(limit),
         search,
     };
 }

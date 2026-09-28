@@ -50,11 +50,11 @@ function createCommunity({ store, config, fetchImpl = globalThis.fetch }) {
         publicUrl: config.community.publicUrl,
 
         /** The stored thread id (no network call), or null. */
-        knownThread(offer) { const k = store.discussion.get(offer.id); return k ? k.threadId : null; },
+        async knownThread(offer) { const k = await store.discussion.get(offer.id); return k ? k.threadId : null; },
 
         /** The stored thread id, or resolve it once through Community. */
         async threadFor(offer, label, ctx) {
-            const known = store.discussion.get(offer.id);
+            const known = await store.discussion.get(offer.id);
             if (known) return known.threadId;
             if (!discussion) return null;
             const out = await store.discussion.threadFor(offer.id, refFor(offer, label), { client: discussion, traceparent: ctx && ctx.traceparent, requestId: ctx && ctx.requestId });
@@ -64,13 +64,13 @@ function createCommunity({ store, config, fetchImpl = globalThis.fetch }) {
         /** { thread, comments, next_cursor } read as an anonymous visitor (public data only). */
         async readThread(threadId, { after, ctx } = {}) {
             const qs = after ? `?after=${encodeURIComponent(after)}` : '';
-            return call('GET', `/api/v1/comments/threads/${encodeURIComponent(threadId)}${qs}`, { ctx });
+            return await call('GET', `/api/v1/comments/threads/${encodeURIComponent(threadId)}${qs}`, { ctx });
         },
 
         /** Comment as the signed-in member. */
         async comment(threadId, subject, { message, parentId } = {}, ctx) {
             if (!writeTokens) { const e = new Error('comments are not configured'); e.status = 503; throw e; }
-            return call('POST', `/api/v1/comments/threads/${encodeURIComponent(threadId)}/comments`, {
+            return await call('POST', `/api/v1/comments/threads/${encodeURIComponent(threadId)}/comments`, {
                 tokens: writeTokens, subject, body: { message, ...(parentId ? { parent_id: parentId } : {}) }, ctx,
             });
         },
@@ -79,7 +79,7 @@ function createCommunity({ store, config, fetchImpl = globalThis.fetch }) {
          * Best effort: hide an offer's thread when moderators disable it, show it again when enabled. Needs community.comment.moderate.
          */
         async setThreadVisibility(offer, visibility, ctx) {
-            const known = store.discussion.get(offer.id);
+            const known = await store.discussion.get(offer.id);
             if (!known || !modTokens) return false;
             try {
                 await call('PUT', `/api/v1/comments/threads/${encodeURIComponent(known.threadId)}/visibility`, { tokens: modTokens, body: { visibility }, ctx });

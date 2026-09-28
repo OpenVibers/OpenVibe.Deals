@@ -2,8 +2,8 @@
 Description=OpenVibe.Deals — community deals with timestamped price observations
 # Network (sign-in, JWKS, service tokens), Events (the outbox relay) and Sources (imports) should be up first, but Deals
 # degrades gracefully without them: pages and feeds serve; sign-in, events and imports wait (see /api/ready).
-After=network.target
-Wants=openvibe-network.service
+After=network.target postgresql.service pgbouncer.service valkey-server.service
+Wants=openvibe-network.service postgresql.service pgbouncer.service valkey-server.service
 
 [Service]
 Type=simple

@@ -15,58 +15,58 @@ function createReads({ store }) {
     const q = {
         byId: db.prepare('SELECT * FROM deal_offers WHERE id = ?'),
         bySlug: db.prepare('SELECT * FROM deal_offers WHERE slug = ?'),
-        group: db.prepare(`WITH RECURSIVE g(id, depth) AS (SELECT ?, 0 UNION SELECT o.id, g.depth + 1 FROM deal_offers o JOIN g ON o.merged_into = g.id WHERE g.depth < 50)
+        group: db.prepare(`WITH RECURSIVE g(id, depth) AS (SELECT ?::text COLLATE "C", 0 UNION SELECT o.id, g.depth + 1 FROM deal_offers o JOIN g ON o.merged_into = g.id WHERE g.depth < 50)
                            SELECT id FROM g`),
-        observations: db.prepare(`SELECT o.*, o.rowid AS seq, s.kind AS source_kind, s.ref_service, s.ref_type, s.ref_id, s.ref_revision, s.source_key,
+        observations: db.prepare(`SELECT o.*, s.kind AS source_kind, s.ref_service, s.ref_type, s.ref_id, s.ref_revision, s.source_key,
                                          s.url AS source_url, s.label AS source_label, s.license_note, s.removed_at AS source_removed_at
                                     FROM deal_price_observations o JOIN deal_offer_sources s ON s.id = o.source_id
-                                   WHERE o.offer_id IN (SELECT value FROM json_each(?))
-                                   ORDER BY o.observed_at DESC, o.rowid DESC`),
+                                   WHERE o.offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb))
+                                   ORDER BY o.observed_at DESC, o.seq DESC`),
         latest: db.prepare(`SELECT o.*, s.kind AS source_kind, s.ref_service, s.ref_id, s.source_key, s.url AS source_url, s.label AS source_label
                               FROM deal_price_observations o JOIN deal_offer_sources s ON s.id = o.source_id
-                             WHERE o.offer_id IN (SELECT value FROM json_each(?)) AND s.removed_at IS NULL
-                             ORDER BY o.observed_at DESC, o.rowid DESC LIMIT 1`),
-        sources: db.prepare(`SELECT * FROM deal_offer_sources WHERE offer_id IN (SELECT value FROM json_each(?)) ORDER BY created_at, rowid`),
-        votes: db.prepare(`SELECT offer_id, subject, value, weight, ip_hash, updated_at, rowid AS seq FROM deal_votes
-                            WHERE offer_id IN (SELECT value FROM json_each(?)) ORDER BY updated_at, rowid`),
+                             WHERE o.offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) AND s.removed_at IS NULL
+                             ORDER BY o.observed_at DESC, o.seq DESC LIMIT 1`),
+        sources: db.prepare(`SELECT * FROM deal_offer_sources WHERE offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) ORDER BY created_at, seq`),
+        votes: db.prepare(`SELECT offer_id, subject, value, weight, ip_hash, updated_at, seq FROM deal_votes
+                            WHERE offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) ORDER BY updated_at, seq`),
         members: db.prepare('SELECT * FROM deal_offers WHERE merged_into = ? ORDER BY merged_at'),
         lastSnapshot: db.prepare('SELECT * FROM deal_hotness_snapshots WHERE offer_id = ? ORDER BY id DESC LIMIT 1'),
     };
 
-    const get = (id) => (id ? q.byId.get(String(id)) : null);
+    const get = async (id) => (id ? await q.byId.get(String(id)) : null);
 
     /** By id (dof_…) or slug. */
-    function find(idOrSlug) {
+    async function find(idOrSlug) {
         const s = String(idOrSlug || '');
-        return s.startsWith('dof_') ? get(s) : q.bySlug.get(s) || null;
+        return s.startsWith('dof_') ? await get(s) : await q.bySlug.get(s) || null;
     }
 
-    function mustFind(idOrSlug) {
-        const o = find(idOrSlug);
+    async function mustFind(idOrSlug) {
+        const o = await find(idOrSlug);
         if (!o) throw new ApiError(404, 'offer.not_found', 'No such offer');
         return o;
     }
 
     /** The canonical offer a (possibly merged) offer resolves to. */
-    function root(offer) {
+    async function root(offer) {
         let cur = offer;
-        for (let i = 0; cur && cur.merged_into && i < 50; i++) cur = get(cur.merged_into);
+        for (let i = 0; cur && cur.merged_into && i < 50; i++) cur = await get(cur.merged_into);
         return cur;
     }
 
-    const groupIds = (rootId) => q.group.all(rootId).map((r) => r.id);
+    const groupIds = async (rootId) => (await q.group.all(rootId)).map((r) => r.id);
     const J = (list) => JSON.stringify(list);
 
     /** Each subject's effective vote in a group: their most recent row (0 = removed). */
-    function effectiveVotes(ids) {
+    async function effectiveVotes(ids) {
         const bySubject = new Map();
-        for (const v of q.votes.all(J(ids))) bySubject.set(v.subject, v);
+        for (const v of await q.votes.all(J(ids))) bySubject.set(v.subject, v);
         return bySubject;
     }
 
-    function tally(ids) {
+    async function tally(ids) {
         let up = 0, down = 0, upW = 0, downW = 0;
-        for (const v of effectiveVotes(ids).values()) {
+        for (const v of (await effectiveVotes(ids)).values()) {
             if (v.value === 1) { up++; upW += v.weight; } else if (v.value === -1) { down++; downW += v.weight; }
         }
         const r4 = (x) => Math.round(x * 10000) / 10000;
@@ -79,13 +79,13 @@ function createReads({ store }) {
         mustFind,
         root,
         groupIds,
-        observations: (ids) => q.observations.all(J(ids)),
-        latestObservation: (ids) => q.latest.get(J(ids)) || null,
-        sources: (ids) => q.sources.all(J(ids)),
+        observations: async (ids) => await q.observations.all(J(ids)),
+        latestObservation: async (ids) => await q.latest.get(J(ids)) || null,
+        sources: async (ids) => await q.sources.all(J(ids)),
         effectiveVotes,
         tally,
-        mergedMembers: (id) => q.members.all(id),
-        lastSnapshot: (id) => q.lastSnapshot.get(id) || null,
+        mergedMembers: async (id) => await q.members.all(id),
+        lastSnapshot: async (id) => await q.lastSnapshot.get(id) || null,
     };
 }
 

@@ -34,13 +34,13 @@ const { sourceItem } = require('./helpers/mocks');
         const r = await t.get('/submit', { as: alice, form: { url: 'https://store.example/x', title: 'Currency test', price: '10' } });
         assert.strictEqual(r.status, 422);
         assert.match(r.text, /needs its currency/);
-        assert.strictEqual(t.ctx.store.db.prepare("SELECT COUNT(*) AS n FROM deal_offers WHERE url = 'https://store.example/x'").get().n, 0);
+        assert.strictEqual((await t.ctx.store.db.prepare("SELECT COUNT(*) AS n FROM deal_offers WHERE url = 'https://store.example/x'").get()).n, 0);
         const bad = await t.get('/submit', { as: alice, form: { url: 'https://store.example/y', title: 'Symbol test', price: '$10', currency: 'USD' } });
         assert.strictEqual(bad.status, 422);
     });
 
     await check('the price comparison ranks fresh stated prices first; unknown and stale never sort as cheap', async () => {
-        const product = t.ctx.catalog.product(noPrice.product_id);
+        const product = await t.ctx.catalog.product(noPrice.product_id);
         // An older, cheaper offer that goes stale, then a fresh one with a stated price.
         const stale = await t.submit(alice, { url: 'https://cheap.example/lamp', title: 'Desk lamp at Cheap', price: '5.00', currency: 'USD', product_name: 'Acme desk lamp' });
         assert.strictEqual(stale.product_id, product.id, 'product resolved by its name alias');
@@ -66,7 +66,7 @@ const { sourceItem } = require('./helpers/mocks');
     await check('a price in an imported headline is not parsed into a price', async () => {
         t.sources.put(sourceItem({ id: 'itm_01K5ZZZZZZZZZZZZZZZZZZZZZ2', kind: 'article', title: 'Acme blender for $19 + free shipping', url: 'https://deals.example/blender', retrievedAt: t.clock.now() }));
         await t.ctx.importer.pull();
-        const o = t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE url = 'https://deals.example/blender'").get();
+        const o = await t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE url = 'https://deals.example/blender'").get();
         const json = await t.offerJson(o.slug);
         assert.strictEqual(json.latest_observation.price, null);
         assert.strictEqual(json.latest_observation.currency, null);
@@ -75,7 +75,7 @@ const { sourceItem } = require('./helpers/mocks');
     await check('a malformed imported price stays null (never repaired)', async () => {
         t.sources.put(sourceItem({ id: 'itm_01K5ZZZZZZZZZZZZZZZZZZZZZ3', title: 'Weird price', url: 'https://deals.example/weird', fields: { price: 'call us', currency: 'USD', availability: 'SomethingElse' }, retrievedAt: t.clock.now() }));
         await t.ctx.importer.pull();
-        const o = t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE url = 'https://deals.example/weird'").get();
+        const o = await t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE url = 'https://deals.example/weird'").get();
         const json = await t.offerJson(o.slug);
         assert.strictEqual(json.latest_observation.price, null);
         assert.strictEqual(json.latest_observation.availability, null, 'an unknown availability term is not guessed');
@@ -85,7 +85,7 @@ const { sourceItem } = require('./helpers/mocks');
         const feed = await t.get('/feed.json');
         const item = feed.json().items.find((i) => i.url.endsWith(noPrice.slug));
         assert.match(item.summary, /Price not stated/);
-        const doc = t.events('deals.index_document.upserted').filter((e) => e.payload.id === noPrice.id).pop().payload;
+        const doc = (await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === noPrice.id).pop().payload;
         assert.match(doc.body, /price not stated/);
         assert.strictEqual(doc.facets.currency, undefined);
     });

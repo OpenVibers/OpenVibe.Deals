@@ -60,16 +60,16 @@ const { sourceItem } = require('./helpers/mocks');
     });
 
     await check('the worker re-indexes a price that went stale: one new Search document (noindex), then nothing', async () => {
-        const before = t.events('deals.index_document.upserted').filter((e) => e.payload.id === offer.id);
+        const before = (await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === offer.id);
         await t.ctx.worker.tick();
-        const after = t.events('deals.index_document.upserted').filter((e) => e.payload.id === offer.id);
+        const after = (await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === offer.id);
         assert.strictEqual(after.length, before.length + 1);
         const doc = after[after.length - 1].payload;
         assert.strictEqual(doc.facets.freshness, 'stale');
         assert.strictEqual(doc.indexability.decision, 'noindex');
         assert.ok(doc.revision > before[before.length - 1].payload.revision);
         await t.ctx.worker.tick();
-        assert.strictEqual(t.events('deals.index_document.upserted').filter((e) => e.payload.id === offer.id).length, after.length);
+        assert.strictEqual((await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === offer.id).length, after.length);
     });
 
     await check('a new observation makes it fresh again, and the history keeps both, newest first', async () => {
@@ -88,7 +88,7 @@ const { sourceItem } = require('./helpers/mocks');
     await check('an imported observation is dated by when the source saw it: old retrieval → stale from the start', async () => {
         t.sources.put(sourceItem({ id: 'itm_01K5ZZZZZZZZZZZZZZZZZZZZZ1', title: 'Old TV offer', url: 'https://tv.example/old', fields: { price: '300', currency: 'EUR' }, retrievedAt: t.clock.now() - 72 * HOUR }));
         await t.ctx.importer.pull();
-        const o = t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE url = 'https://tv.example/old'").get();
+        const o = await t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE url = 'https://tv.example/old'").get();
         const json = await t.offerJson(o.slug);
         assert.strictEqual(json.latest_observation.observed_at, new Date(t.clock.now() - 72 * HOUR).toISOString());
         assert.strictEqual(json.freshness.state, 'stale');

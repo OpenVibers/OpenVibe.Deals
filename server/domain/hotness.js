@@ -40,24 +40,24 @@ function createHotness({ store, reads }) {
     const { db } = store;
     const insert = db.prepare(`INSERT INTO deal_hotness_snapshots (offer_id, computed_at, formula, up_count, down_count, up_weight, down_weight, score, hot, first_seen_at, reason)
                                VALUES (@offer_id, @computed_at, @formula, @up_count, @down_count, @up_weight, @down_weight, @score, @hot, @first_seen_at, @reason)`);
-    const firstSeen = db.prepare('SELECT MIN(created_at) AS t FROM deal_offers WHERE id IN (SELECT value FROM json_each(?))');
+    const firstSeen = db.prepare('SELECT MIN(created_at) AS t FROM deal_offers WHERE id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb))');
 
     /** Inputs for a canonical offer at time t (from the database, never from a request). */
-    function inputs(rootId, t) {
-        const ids = reads.groupIds(rootId);
-        const tally = reads.tally(ids);
-        return { ids, tally, firstSeenAt: firstSeen.get(JSON.stringify(ids)).t, t };
+    async function inputs(rootId, t) {
+        const ids = await reads.groupIds(rootId);
+        const tally = await reads.tally(ids);
+        return { ids, tally, firstSeenAt: (await firstSeen.get(JSON.stringify(ids))).t, t };
     }
 
     /** Compute and store a snapshot for a canonical offer. Inside the caller's transaction. */
-    function snapshot(rootId, reason, t = store.now()) {
-        const { tally, firstSeenAt } = inputs(rootId, t);
+    async function snapshot(rootId, reason, t = store.now()) {
+        const { tally, firstSeenAt } = await inputs(rootId, t);
         const r = formula({ upWeight: tally.upWeight, downWeight: tally.downWeight, firstSeenAt, t });
         const row = {
             offer_id: rootId, computed_at: t, formula: r.formula, up_count: tally.up, down_count: tally.down,
             up_weight: tally.upWeight, down_weight: tally.downWeight, score: r.score, hot: r.hot, first_seen_at: firstSeenAt, reason,
         };
-        insert.run(row);
+        await insert.run(row);
         return row;
     }
 
@@ -67,11 +67,11 @@ function createHotness({ store, reads }) {
     }
 
     /** Worker: snapshot every active canonical offer created in the window, all at the same t. */
-    function tick({ windowDays = 14, t = store.now() } = {}) {
-        const ids = db.prepare(`SELECT id FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND created_at >= ?`).all(t - windowDays * 24 * HOUR).map((r) => r.id);
-        store.tx(() => { for (const id of ids) snapshot(id, 'tick', t); });
+    async function tick({ windowDays = 14, t = store.now() } = {}) {
+        const ids = (await db.prepare(`SELECT id FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND created_at >= ?`).all(t - windowDays * 24 * HOUR)).map((r) => r.id);
+        await store.tx(async () => { for (const id of ids) await snapshot(id, 'tick', t); });
         // Keep the latest snapshot per offer and everything from the last 7 days.
-        db.prepare(`DELETE FROM deal_hotness_snapshots WHERE computed_at < ? AND id NOT IN (SELECT MAX(id) FROM deal_hotness_snapshots GROUP BY offer_id)`).run(t - 7 * 24 * HOUR);
+        await db.prepare(`DELETE FROM deal_hotness_snapshots WHERE computed_at < ? AND id NOT IN (SELECT MAX(id) FROM deal_hotness_snapshots GROUP BY offer_id)`).run(t - 7 * 24 * HOUR);
         return ids.length;
     }
 

@@ -24,17 +24,17 @@ function createWorker({ config, store, offers, hotness, indexing, listings, impo
         running = true;
         const summary = {};
         try {
-            summary.expired = offers.expireDue();
-            summary.snapshots = hotness.tick({ windowDays: config.worker.hotWindowDays });
+            summary.expired = await offers.expireDue();
+            summary.snapshots = await hotness.tick({ windowDays: config.worker.hotWindowDays });
             let reindexed = 0;
-            for (const o of listings.indexable()) {
-                store.tx(() => { if (indexing.indexOffer(o)) reindexed++; });
+            for (const o of await listings.indexable()) {
+                await store.tx(async () => { if (await indexing.indexOffer(o)) reindexed++; });
             }
-            for (const p of listings.products()) store.tx(() => { if (indexing.indexProduct(p)) reindexed++; });
+            for (const p of await listings.products()) await store.tx(async () => { if (await indexing.indexProduct(p)) reindexed++; });
             summary.reindexed = reindexed;
             summary.import = await importer.pull();
             summary.refresh = await importer.refresh();
-            summary.pruned = limits.prune();
+            summary.pruned = await limits.prune();
             lastError = null;
         } catch (err) {
             lastError = err.message;

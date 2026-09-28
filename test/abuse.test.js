@@ -28,7 +28,7 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         assert.strictEqual(r.status, 429);
         assert.strictEqual(r.json().code, 'vote.rate_limited');
         assert.ok(Number(r.headers.get('retry-after')) > 0);
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes WHERE subject = ?').get(u.subject).n, 4);
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes WHERE subject = ?').get(u.subject)).n, 4);
         t.clock.advance(HOUR + 1000);
         assert.strictEqual((await vote(u, offers[4], 1, '198.51.100.9')).status, 200);
     });
@@ -47,12 +47,12 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         const codes = [];
         for (let i = 0; i < 6; i++) codes.push((await vote(t.network.addUser(`ipuser${i}`), offers[6], 1, ip)).status);
         assert.deepStrictEqual(codes, [200, 200, 200, 200, 200, 429]);
-        const dump = JSON.stringify(t.ctx.store.db.prepare('SELECT * FROM deal_votes').all()) + JSON.stringify(t.ctx.store.db.prepare('SELECT * FROM rate_events').all()) + JSON.stringify(t.ctx.store.db.prepare('SELECT * FROM deal_flags').all());
+        const dump = JSON.stringify(await t.ctx.store.db.prepare('SELECT * FROM deal_votes').all()) + JSON.stringify(await t.ctx.store.db.prepare('SELECT * FROM rate_events').all()) + JSON.stringify(await t.ctx.store.db.prepare('SELECT * FROM deal_flags').all());
         assert.ok(!dump.includes(ip), 'no raw IP in votes, rate windows or flags');
     });
 
     await check('five voters from one IP hash on one offer raise ONE open shared_ip vote-ring flag', async () => {
-        const flags = t.ctx.store.db.prepare("SELECT * FROM deal_flags WHERE kind = 'vote_ring' AND reason = 'shared_ip'").all();
+        const flags = await t.ctx.store.db.prepare("SELECT * FROM deal_flags WHERE kind = 'vote_ring' AND reason = 'shared_ip'").all();
         assert.strictEqual(flags.length, 1);
         assert.strictEqual(flags[0].status, 'open');
         assert.strictEqual(flags[0].offer_id, offers[6].id);
@@ -79,7 +79,7 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
             t.clock.advance(60 * 1000);
             assert.strictEqual((await vote(b, offers[i], 1, `10.1.${i}.1`)).status, 200);
         }
-        const flags = t.ctx.store.db.prepare("SELECT * FROM deal_flags WHERE kind = 'vote_ring' AND reason = 'covote' AND status = 'open'").all();
+        const flags = await t.ctx.store.db.prepare("SELECT * FROM deal_flags WHERE kind = 'vote_ring' AND reason = 'covote' AND status = 'open'").all();
         assert.strictEqual(flags.length, 1);
         const d = JSON.parse(flags[0].details);
         assert.deepStrictEqual(d.voters, [a.subject, b.subject].sort());
@@ -105,19 +105,19 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
     });
 
     await check('a moderator resolves a flag (audited); flags never change votes by themselves', async () => {
-        const f = t.ctx.store.db.prepare("SELECT * FROM deal_flags WHERE reason = 'shared_ip'").get();
-        const votesBefore = t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes').get().n;
+        const f = await t.ctx.store.db.prepare("SELECT * FROM deal_flags WHERE reason = 'shared_ip'").get();
+        const votesBefore = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes').get()).n;
         const r = await t.get(`/mod/flags/${f.id}/resolve`, { as: t.mod, form: { resolution: 'checked' } });
         assert.strictEqual(r.status, 303);
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT status FROM deal_flags WHERE id = ?').get(f.id).status, 'resolved');
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes').get().n, votesBefore);
-        assert.ok(t.ctx.store.db.prepare("SELECT * FROM moderation_log WHERE action = 'flag.resolve'").get());
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT status FROM deal_flags WHERE id = ?').get(f.id)).status, 'resolved');
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes').get()).n, votesBefore);
+        assert.ok(await t.ctx.store.db.prepare("SELECT * FROM moderation_log WHERE action = 'flag.resolve'").get());
     });
 
     await check('a person\'s repeated report updates their open flag instead of adding another', async () => {
         const u = t.network.addUser('reporter');
         for (let i = 0; i < 3; i++) assert.strictEqual((await t.get(`/d/${offers[1].slug}/flag`, { as: u, form: { kind: 'expired', reason: `try ${i}` } })).status, 303);
-        const rows = t.ctx.store.db.prepare('SELECT * FROM deal_flags WHERE reporter = ?').all(u.subject);
+        const rows = await t.ctx.store.db.prepare('SELECT * FROM deal_flags WHERE reporter = ?').all(u.subject);
         assert.strictEqual(rows.length, 1);
         assert.strictEqual(rows[0].reason, 'try 2');
     });
@@ -134,7 +134,7 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         const u = t.network.addUser('csrf');
         const r = await t.get(`/d/${offers[3].slug}/vote`, { as: u, form: { value: 'up', csrf: 'forged' } });
         assert.strictEqual(r.status, 403);
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes WHERE subject = ?').get(u.subject).n, 0);
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes WHERE subject = ?').get(u.subject)).n, 0);
     });
 
     await t.close();

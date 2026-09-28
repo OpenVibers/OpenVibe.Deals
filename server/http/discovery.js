@@ -23,17 +23,17 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
     const xml = (res, body) => res.type('application/xml').set('Cache-Control', 'public, max-age=300').send(body);
 
-    function offerEntries() {
-        return listings.indexable().map((o) => {
-            const v = publication.offerView(o);
+    async function offerEntries() {
+        return Promise.all((await listings.indexable()).map(async (o) => {
+            const v = await publication.offerView(o);
             return { loc: abs(publication.offerPath(o)), lastmod: v.latest ? Math.max(v.latest.observed_at, o.updated_at) : o.updated_at, decision: v.decision };
-        });
+        }));
     }
-    function productEntries() {
-        return listings.products().map((p) => {
-            const pv = publication.productView(p);
+    async function productEntries() {
+        return Promise.all((await listings.products()).map(async (p) => {
+            const pv = await publication.productView(p);
             return { loc: abs(publication.productPath(p)), lastmod: pv.freshestObservedAt || undefined, decision: pv.decision };
-        });
+        }));
     }
 
     router.get('/robots.txt', (_req, res) => {
@@ -66,15 +66,15 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
         }));
     });
 
-    router.get('/sitemap.xml', (_req, res) => {
-        const o = offerEntries().filter((e) => e.decision.indexable).map((e) => e.lastmod);
-        const p = productEntries().filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
+    router.get('/sitemap.xml', async (_req, res) => {
+        const o = (await offerEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod);
+        const p = (await productEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
         const iso = (list) => (list.length ? { lastmod: new Date(Math.max(...list)).toISOString() } : {});
         xml(res, seo.sitemapIndex([{ loc: abs('/sitemaps/offers.xml'), ...iso(o) }, { loc: abs('/sitemaps/products.xml'), ...iso(p) }]));
     });
 
-    router.get('/sitemaps/offers.xml', (_req, res) => xml(res, seo.sitemap(offerEntries()).files[0]));
-    router.get('/sitemaps/products.xml', (_req, res) => xml(res, seo.sitemap(productEntries()).files[0]));
+    router.get('/sitemaps/offers.xml', async (_req, res) => xml(res, seo.sitemap(await offerEntries()).files[0]));
+    router.get('/sitemaps/products.xml', async (_req, res) => xml(res, seo.sitemap(await productEntries()).files[0]));
 
     return router;
 }

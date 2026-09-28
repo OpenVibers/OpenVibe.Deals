@@ -11,8 +11,8 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
 (async () => {
     const t = await boot();
     const alice = t.network.addUser('alice');
-    const byUrl = (u) => t.ctx.store.db.prepare('SELECT * FROM deal_offers WHERE url = ?').get(u);
-    const obsOf = (id) => t.ctx.store.db.prepare('SELECT * FROM deal_price_observations WHERE offer_id = ? ORDER BY observed_at, rowid').all(id);
+    const byUrl = async (u) => await t.ctx.store.db.prepare('SELECT * FROM deal_offers WHERE url = ?').get(u);
+    const obsOf = async (id) => await t.ctx.store.db.prepare('SELECT * FROM deal_price_observations WHERE offer_id = ? ORDER BY observed_at, seq').all(id);
     const T0 = t.clock.now();
 
     await check('offer, product and article items become offers; values exactly as stated; observed_at = retrieved_at', async () => {
@@ -28,20 +28,20 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         assert.deepStrictEqual(s.outcomes, { created: 4 }, JSON.stringify(s));
         assert.strictEqual(s.items, 3);
 
-        const esp = byUrl('https://coffee.example/espresso');
+        const esp = await byUrl('https://coffee.example/espresso');
         assert.strictEqual(esp.origin, 'import');
         assert.strictEqual(esp.review_state, 'pending');
         assert.strictEqual(esp.expires_at, Date.parse('2026-10-01'));
-        const o = obsOf(esp.id)[0];
+        const o = (await obsOf(esp.id))[0];
         assert.deepStrictEqual([o.price, o.currency, o.availability, o.condition, o.observed_at, o.origin], ['249.00', 'EUR', 'in_stock', 'refurbished', T0 - HOUR, 'import']);
-        assert.strictEqual(t.ctx.catalog.store(esp.store_id).name, 'Coffee Shop');
+        assert.strictEqual((await t.ctx.catalog.store(esp.store_id)).name, 'Coffee Shop');
 
-        const k1 = byUrl('https://kettles.example/acme-2000');
-        const k2 = byUrl('https://market.example/acme-2000');
+        const k1 = await byUrl('https://kettles.example/acme-2000');
+        const k2 = await byUrl('https://market.example/acme-2000');
         assert.ok(k1 && k2 && k1.product_id && k1.product_id === k2.product_id, 'one product, two offers (tracking parameter stripped)');
-        assert.strictEqual(obsOf(k2.id)[0].price, null);
-        assert.strictEqual(obsOf(k2.id)[0].availability, 'out_of_stock');
-        const product = t.ctx.catalog.product(k1.product_id);
+        assert.strictEqual((await obsOf(k2.id))[0].price, null);
+        assert.strictEqual((await obsOf(k2.id))[0].availability, 'out_of_stock');
+        const product = await t.ctx.catalog.product(k1.product_id);
         assert.strictEqual(product.brand, 'Acme', 'the brand the source stated');
         const p = (await t.get(`/p/${product.slug}.json`)).json();
         assert.strictEqual(p.offers.length, 2);
@@ -49,7 +49,7 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
     });
 
     await check('imported text is noindex until a person reviews it; review is recorded and re-indexes', async () => {
-        const esp = byUrl('https://coffee.example/espresso');
+        const esp = await byUrl('https://coffee.example/espresso');
         const page = await t.get(`/d/${esp.slug}`);
         assert.strictEqual(robotsOf(page.text), 'noindex, follow');
         assert.match(page.text, /imported from a source and has not been reviewed/);
@@ -61,20 +61,20 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         const after = await t.offerJson(esp.slug);
         assert.strictEqual(after.review_state, 'reviewed');
         assert.strictEqual(after.indexability.indexable, true);
-        const doc = t.events('deals.index_document.upserted').filter((e) => e.payload.id === esp.id).pop().payload;
+        const doc = (await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === esp.id).pop().payload;
         assert.strictEqual(doc.indexability.decision, 'index');
         assert.strictEqual(doc.authorship, 'imported');
         assert.deepStrictEqual(doc.provenance.map((x) => [x.service, x.type, x.id]), [['sources', 'item', 'itm_01K5AAAAAAAAAAAAAAAAAAAAA1']]);
     });
 
     await check('replaying the feed changes nothing (same revision, same retrieval)', async () => {
-        const count = t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_price_observations').get().n;
-        const events = t.events().length;
-        t.ctx.store.db.prepare("UPDATE import_state SET value = '0'").run();
+        const count = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_price_observations').get()).n;
+        const events = (await t.events()).length;
+        await t.ctx.store.db.prepare("UPDATE import_state SET value = '0'").run();
         const s = await t.ctx.importer.pull();
         assert.deepStrictEqual(s.outcomes, { unchanged: 4 });
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_price_observations').get().n, count);
-        assert.strictEqual(t.events().length, events);
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_price_observations').get()).n, count);
+        assert.strictEqual((await t.events()).length, events);
     });
 
     await check('a new revision is a new observation; the history keeps the old price with its time', async () => {
@@ -83,8 +83,8 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
             fields: { price: '229.00', currency: 'EUR', availability: 'LimitedAvailability', seller: 'Coffee Shop' } }));
         const s = await t.ctx.importer.pull();
         assert.deepStrictEqual(s.outcomes, { updated: 1 });
-        const esp = byUrl('https://coffee.example/espresso');
-        assert.deepStrictEqual(obsOf(esp.id).map((o) => [o.price, o.source_revision]), [['249.00', 1], ['229.00', 2]]);
+        const esp = await byUrl('https://coffee.example/espresso');
+        assert.deepStrictEqual((await obsOf(esp.id)).map((o) => [o.price, o.source_revision]), [['249.00', 1], ['229.00', 2]]);
         assert.strictEqual((await t.offerJson(esp.slug)).latest_observation.price, '229.00');
     });
 
@@ -95,7 +95,7 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAA4', sourceKey: 'other-feed', kind: 'article', title: 'Espresso deal', url: 'http://www.coffee.example/espresso', retrievedAt: t.clock.now() }));
         const s = await t.ctx.importer.pull();
         assert.deepStrictEqual(s.outcomes, { attached: 1 });
-        const esp = byUrl('https://coffee.example/espresso');
+        const esp = await byUrl('https://coffee.example/espresso');
         const json = await t.offerJson(esp.slug);
         assert.deepStrictEqual(json.sources.map((x) => x.key).sort(), ['other-feed', 'shop-jsonld']);
     });
@@ -106,8 +106,8 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         it.provenance = { ...it.provenance, retrieved_at: new Date(t.clock.now() - HOUR).toISOString() };
         const r = await t.ctx.importer.refresh();
         assert.ok(r.outcomes.refreshed >= 1, JSON.stringify(r));
-        const garden = byUrl('https://news.example/garden');
-        const obs = obsOf(garden.id);
+        const garden = await byUrl('https://news.example/garden');
+        const obs = await obsOf(garden.id);
         assert.strictEqual(obs.length, 2);
         assert.strictEqual(obs[1].origin, 'import_refresh');
         assert.strictEqual(obs[1].observed_at, t.clock.now() - HOUR);
@@ -117,11 +117,11 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         t.sources.put({ ...t.sources.items.find((i) => i.id === 'itm_01K5AAAAAAAAAAAAAAAAAAAAA3'), removed: { at: new Date(t.clock.now()).toISOString(), reason: 'licence withdrawn' } });
         const s = await t.ctx.importer.pull();
         assert.deepStrictEqual(s.outcomes, { removed: 1 });
-        const garden = byUrl('https://news.example/garden');
+        const garden = await byUrl('https://news.example/garden');
         assert.strictEqual(garden.status, 'disabled');
         assert.match(garden.disabled_reason, /licence withdrawn/);
         assert.strictEqual((await t.get(`/d/${garden.slug}`)).status, 410);
-        assert.ok(t.events('deals.index_document.deleted').some((e) => e.payload.id === garden.id));
+        assert.ok((await t.events('deals.index_document.deleted')).some((e) => e.payload.id === garden.id));
         assert.ok(!(await t.get('/feed.xml')).text.includes(garden.slug));
     });
 
@@ -141,12 +141,12 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
     });
 
     await check('Sources down: the pull fails honestly (readiness says so), keeps its cursor, invents nothing', async () => {
-        const cursor = t.ctx.importer.cursor();
-        const offers = t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get().n;
+        const cursor = await t.ctx.importer.cursor();
+        const offers = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get()).n;
         t.sources.setDown(true);
         await t.ctx.importer.pull();
-        assert.strictEqual(t.ctx.importer.cursor(), cursor);
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get().n, offers);
+        assert.strictEqual(await t.ctx.importer.cursor(), cursor);
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get()).n, offers);
         const ready = (await t.get('/api/ready')).json();
         assert.strictEqual(ready.checks.sources_import.status, 'fail');
         assert.match(ready.checks.sources_import.reason || JSON.stringify(ready.checks.sources_import), /Sources answered 503/);

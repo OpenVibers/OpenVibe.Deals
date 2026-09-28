@@ -31,7 +31,7 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
     await check('only moderators merge', async () => {
         const r = await t.get(`/mod/offers/${B.slug}/merge`, { as: eve, form: { into: A.slug } });
         assert.strictEqual(r.status, 403);
-        assert.strictEqual(t.ctx.reads.get(B.id).merged_into, null);
+        assert.strictEqual((await t.ctx.reads.get(B.id)).merged_into, null);
     });
 
     await check('merge B into A: the voter who voted on both counts once, every observation and source is kept', async () => {
@@ -44,7 +44,7 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         assert.strictEqual(a.latest_observation.price, '389', 'the latest observation of the group');
         assert.strictEqual(a.sources.length, 3);
         assert.deepStrictEqual(a.merged_from.map((m) => m.slug), [B.slug]);
-        const rows = t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes').get().n;
+        const rows = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_votes').get()).n;
         assert.strictEqual(rows, 4, 'no vote row was deleted, moved or copied');
     });
 
@@ -54,15 +54,15 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         assert.strictEqual(page.headers.get('location'), `/d/${A.slug}`);
         const json = await t.get(`/d/${B.slug}.json`);
         assert.strictEqual(json.headers.get('location'), `/d/${A.slug}.json`);
-        const tomb = t.events('deals.index_document.deleted').filter((e) => e.payload.id === B.id);
+        const tomb = (await t.events('deals.index_document.deleted')).filter((e) => e.payload.id === B.id);
         assert.strictEqual(tomb.length, 1);
-        const upd = t.events('deals.offer.updated').filter((e) => e.payload.merged_offer_id === B.id);
+        const upd = (await t.events('deals.offer.updated')).filter((e) => e.payload.merged_offer_id === B.id);
         assert.strictEqual(upd.length, 1);
         assert.strictEqual(upd[0].subject.id, A.id);
     });
 
     await check('the merge is audited with the tallies before and after', async () => {
-        const log = t.ctx.store.db.prepare("SELECT * FROM moderation_log WHERE action = 'merge'").all();
+        const log = await t.ctx.store.db.prepare("SELECT * FROM moderation_log WHERE action = 'merge'").all();
         assert.strictEqual(log.length, 1);
         assert.strictEqual(log[0].offer_id, B.id);
         assert.strictEqual(log[0].target_id, A.id);
@@ -76,13 +76,13 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
     await check('a vote cast through the merged listing lands on the canonical offer; changing a vote counts once', async () => {
         t.clock.advance(60 * 1000);
         assert.strictEqual((await vote(v4, B.slug, 'up')).status, 303);
-        const row = t.ctx.store.db.prepare('SELECT offer_id FROM deal_votes WHERE subject = ?').get(v4.subject);
+        const row = await t.ctx.store.db.prepare('SELECT offer_id FROM deal_votes WHERE subject = ?').get(v4.subject);
         assert.strictEqual(row.offer_id, A.id);
         t.clock.advance(60 * 1000);
         await vote(v1, A.slug, 'down');
         const a = await t.offerJson(A.slug);
         assert.deepStrictEqual([a.votes.up, a.votes.down], [2, 2], 'v2, v4 up; v1 (now down, once), v3 down');
-        assert.strictEqual(t.ctx.votes.mine(v1.subject, t.ctx.reads.get(A.id)), -1);
+        assert.strictEqual(await t.ctx.votes.mine(v1.subject, await t.ctx.reads.get(A.id)), -1);
     });
 
     await check('merging the canonical offer into its own duplicate is refused (no cycles)', async () => {
@@ -103,14 +103,14 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         assert.deepStrictEqual([a.votes.up, a.votes.down], [2, 1], 'A: v2, v4 up, v1 down (cast on A)');
         assert.strictEqual(a.observations.length, 1);
         assert.strictEqual((await t.get(`/d/${B.slug}`)).status, 200);
-        const log = t.ctx.store.db.prepare("SELECT action FROM moderation_log WHERE action IN ('merge','unmerge') ORDER BY id").all().map((x) => x.action);
+        const log = (await t.ctx.store.db.prepare("SELECT action FROM moderation_log WHERE action IN ('merge','unmerge') ORDER BY id").all()).map((x) => x.action);
         assert.deepStrictEqual(log, ['merge', 'unmerge']);
-        const up = t.events('deals.index_document.upserted').filter((e) => e.payload.id === B.id).pop();
+        const up = (await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === B.id).pop();
         assert.ok(up, 'B is back in Search');
     });
 
     await check('hotness after merge and unmerge is computed from the group (snapshots record the reason)', async () => {
-        const reasons = t.ctx.store.db.prepare('SELECT reason FROM deal_hotness_snapshots WHERE offer_id = ? ORDER BY id').all(A.id).map((x) => x.reason);
+        const reasons = (await t.ctx.store.db.prepare('SELECT reason FROM deal_hotness_snapshots WHERE offer_id = ? ORDER BY id').all(A.id)).map((x) => x.reason);
         assert.ok(reasons.includes('merge') && reasons.includes('unmerge'));
         t.clock.advance(HOUR);
     });

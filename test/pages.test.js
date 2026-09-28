@@ -12,7 +12,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
     let deal, timed;
 
     await check('the site starts empty: no seed deals, an honest empty page that is noindex', async () => {
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get().n, 0);
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get()).n, 0);
         const r = await t.get('/');
         assert.strictEqual(r.status, 200);
         assert.match(r.text, /No deals have been posted yet/);
@@ -63,7 +63,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.match(r.headers.get('cache-control'), /private, no-store/);
         const thread = [...t.community.threads.values()][0];
         assert.deepStrictEqual(thread.ref, { service: 'deals', type: 'offer', id: deal.id, label: 'Mini drone with camera' });
-        const cols = t.ctx.store.db.prepare("SELECT name FROM pragma_table_info('deal_offer_discussion_refs')").all().map((x) => x.name).join(',');
+        const cols = (await t.ctx.store.db.prepare("SELECT column_name AS name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'deal_offer_discussion_refs' ORDER BY ordinal_position").all()).map((x) => x.name).join(',');
         assert.doesNotMatch(cols, /message|body|text/);
         t.community.setDown(true);
         const down = await t.get(`/d/${deal.slug}`);
@@ -73,7 +73,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
 
     await check('product, store and search pages', async () => {
         const p = await t.submit(alice, { url: 'https://gadgets.example/drone-pro', title: 'Drone Pro', price: '199', currency: 'USD', product_name: 'SkyCam Drone Pro' });
-        const prod = t.ctx.catalog.product(p.product_id);
+        const prod = await t.ctx.catalog.product(p.product_id);
         const pr = await t.get(`/p/${prod.slug}`);
         assert.strictEqual(pr.status, 200);
         assert.match(pr.text, /Price comparison/);
@@ -97,7 +97,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         const page = await t.get(`/d/${deal.slug}`);
         assert.match(page.text, /This deal expired/);
         assert.strictEqual(robotsOf(page.text), 'noindex, follow');
-        const e = t.events('deals.offer.expired');
+        const e = await t.events('deals.offer.expired');
         assert.strictEqual(e.length, 1);
         assert.strictEqual(e[0].payload.reason, 'submitter');
         assert.ok(!(await t.get('/')).text.includes(deal.slug));
@@ -110,16 +110,16 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.match((await t.get(`/d/${open.slug}`)).text, /End date: not stated/);
         t.clock.advance(3 * HOUR);
         await t.ctx.worker.tick();
-        assert.strictEqual(t.ctx.reads.get(timed.id).status, 'expired');
-        assert.strictEqual(t.ctx.reads.get(timed.id).expired_reason, 'stated_expiry');
-        assert.strictEqual(t.ctx.reads.get(open.id).status, 'active');
+        assert.strictEqual((await t.ctx.reads.get(timed.id)).status, 'expired');
+        assert.strictEqual((await t.ctx.reads.get(timed.id)).expired_reason, 'stated_expiry');
+        assert.strictEqual((await t.ctx.reads.get(open.id)).status, 'active');
         t.clock.advance(30 * 24 * HOUR);
         await t.ctx.worker.tick();
-        assert.strictEqual(t.ctx.reads.get(open.id).status, 'active', 'stale, but never assumed expired');
+        assert.strictEqual((await t.ctx.reads.get(open.id)).status, 'active', 'stale, but never assumed expired');
     });
 
     await check('moderators disable a deal: 410, out of feeds, sitemaps and Search; enable brings it back', async () => {
-        const target = t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE title = 'Drone Pro'").get();
+        const target = await t.ctx.store.db.prepare("SELECT * FROM deal_offers WHERE title = 'Drone Pro'").get();
         await t.get(`/d/${target.slug}`);
         const thread = [...t.community.threads.values()].find((x) => x.ref.id === target.id);
         assert.ok(thread, 'the page resolved its Community thread');
@@ -136,13 +136,13 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         }
         assert.strictEqual((await t.get(`/api/v1/offers/${target.id}`, { as: t.mod })).status, 200, 'moderators still read it');
         assert.ok(!(await t.get('/feed.xml')).text.includes(target.slug));
-        assert.ok(t.events('deals.index_document.deleted').some((e) => e.payload.id === target.id));
+        assert.ok((await t.events('deals.index_document.deleted')).some((e) => e.payload.id === target.id));
         const en = await t.get(`/mod/offers/${target.slug}/enable`, { as: t.mod, form: {} });
         assert.strictEqual(en.status, 303);
         assert.strictEqual((await t.get(`/d/${target.slug}`)).status, 200);
         await new Promise((ok) => setTimeout(ok, 100));
         assert.strictEqual(thread.visibility, 'public');
-        const log = t.ctx.store.db.prepare('SELECT action FROM moderation_log WHERE offer_id = ? ORDER BY id').all(target.id).map((x) => x.action);
+        const log = (await t.ctx.store.db.prepare('SELECT action FROM moderation_log WHERE offer_id = ? ORDER BY id').all(target.id)).map((x) => x.action);
         assert.deepStrictEqual(log, ['disable', 'enable']);
     });
 
@@ -170,7 +170,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.match(idx.text, /sitemaps\/offers.xml/);
         assert.match(idx.text, /sitemaps\/products.xml/);
         const offers = await t.get('/sitemaps/offers.xml');
-        const fresh = t.ctx.store.db.prepare("SELECT slug FROM deal_offers WHERE title = 'Hardcover novel'").get().slug;
+        const fresh = (await t.ctx.store.db.prepare("SELECT slug FROM deal_offers WHERE title = 'Hardcover novel'").get()).slug;
         assert.ok(offers.text.includes(fresh));
         assert.ok(!offers.text.includes(timed.slug), 'expired');
         assert.ok(!offers.text.includes(deal.slug), 'expired');

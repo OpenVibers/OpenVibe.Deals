@@ -32,21 +32,21 @@ function createCatalog({ store }) {
         insertProduct: db.prepare(`INSERT INTO deal_products (id, slug, name, brand, category, description, created_by, created_at, updated_at)
                                    VALUES (@id, @slug, @name, @brand, @category, @description, @created_by, @now, @now)`),
         alias: db.prepare('SELECT * FROM deal_product_aliases WHERE kind = ? AND value_norm = ?'),
-        insertAlias: db.prepare(`INSERT OR IGNORE INTO deal_product_aliases (id, product_id, kind, value, value_norm, source, created_by, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+        insertAlias: db.prepare(`INSERT INTO deal_product_aliases (id, product_id, kind, value, value_norm, source, created_by, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`),
         aliases: db.prepare('SELECT kind, value, source, created_at FROM deal_product_aliases WHERE product_id = ? ORDER BY kind, value'),
     };
 
-    function ensureStore(domain, name = null) {
+    async function ensureStore(domain, name = null) {
         if (!domain) return null;
-        const existing = q.storeByDomain.get(domain);
+        const existing = await q.storeByDomain.get(domain);
         if (existing) {
-            if (name && !existing.name) q.nameStore.run(String(name).slice(0, 120), store.now(), existing.id);
-            return q.storeByDomain.get(domain);
+            if (name && !existing.name) await q.nameStore.run(String(name).slice(0, 120), store.now(), existing.id);
+            return await q.storeByDomain.get(domain);
         }
         const id = newId('dst');
-        q.insertStore.run(id, domain, name ? String(name).slice(0, 120) : null, store.now(), store.now());
-        return q.storeById.get(id);
+        await q.insertStore.run(id, domain, name ? String(name).slice(0, 120) : null, store.now(), store.now());
+        return await q.storeById.get(id);
     }
 
     function storeLabel(s) { return s ? (s.name || s.domain) : null; }
@@ -57,31 +57,31 @@ function createCatalog({ store }) {
      * reported in `conflicts`), never re-pointed silently.
      * input: { name, brand, category, description, gtin, mpn, sku, url }, source, actor
      */
-    function resolve(input, { source = 'community', actor = null, create = true } = {}) {
+    async function resolve(input, { source = 'community', actor = null, create = true } = {}) {
         const given = ALIAS_KINDS.map((kind) => ({ kind, value: input[kind], norm: normAlias(kind, input[kind]) })).filter((a) => a.norm);
         if (input.gtin && !normAlias('gtin', input.gtin)) throw new ApiError(422, 'request.invalid', 'gtin must be 8 to 14 digits');
         let product = null;
         for (const a of given) {
-            const hit = q.alias.get(a.kind, a.norm);
-            if (hit) { product = q.productById.get(hit.product_id); break; }
+            const hit = await q.alias.get(a.kind, a.norm);
+            if (hit) { product = await q.productById.get(hit.product_id); break; }
         }
         let created = false;
         if (!product) {
             if (!create) return { product: null, created: false, conflicts: [] };
             const name = text(input.name, { field: 'product name', min: 2, max: 200, required: true });
             const id = newId('dpr');
-            q.insertProduct.run({
+            await q.insertProduct.run({
                 id, slug: slugify(name, id), name, brand: text(input.brand, { max: 120 }), category: text(input.category, { max: 60 }),
                 description: longText(input.description, 2000), created_by: actor, now: store.now(),
             });
-            product = q.productById.get(id);
+            product = await q.productById.get(id);
             created = true;
         }
         const conflicts = [];
         for (const a of given) {
-            const hit = q.alias.get(a.kind, a.norm);
+            const hit = await q.alias.get(a.kind, a.norm);
             if (hit && hit.product_id !== product.id) { conflicts.push({ kind: a.kind, value: a.value, product_id: hit.product_id }); continue; }
-            if (!hit) q.insertAlias.run(newId('dpa'), product.id, a.kind, String(a.value).trim().slice(0, 300), a.norm, source, actor, store.now());
+            if (!hit) await q.insertAlias.run(newId('dpa'), product.id, a.kind, String(a.value).trim().slice(0, 300), a.norm, source, actor, store.now());
         }
         return { product, created, conflicts };
     }
@@ -89,11 +89,11 @@ function createCatalog({ store }) {
     return {
         ensureStore,
         storeLabel,
-        store: (id) => (id ? q.storeById.get(id) : null),
-        storeByDomain: (d) => q.storeByDomain.get(String(d || '').toLowerCase()),
-        product: (id) => (id ? q.productById.get(id) : null),
-        productBySlug: (slug) => q.productBySlug.get(String(slug || '')),
-        aliases: (productId) => q.aliases.all(productId),
+        store: async (id) => (id ? await q.storeById.get(id) : null),
+        storeByDomain: async (d) => await q.storeByDomain.get(String(d || '').toLowerCase()),
+        product: async (id) => (id ? await q.productById.get(id) : null),
+        productBySlug: async (slug) => await q.productBySlug.get(String(slug || '')),
+        aliases: async (productId) => await q.aliases.all(productId),
         resolve,
         normAlias,
     };

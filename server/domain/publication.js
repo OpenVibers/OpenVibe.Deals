@@ -59,22 +59,22 @@ function createPublication({ config, store, reads, catalog }) {
     }
 
     /** Everything a page, the JSON twin, an event or the index needs about one canonical offer. */
-    function offerView(offer, now = store.now()) {
-        const root = reads.root(offer);
-        const ids = reads.groupIds(root.id);
-        const latest = reads.latestObservation(ids);
-        const tally = reads.tally(ids);
-        const snap = reads.lastSnapshot(root.id);
+    async function offerView(offer, now = store.now()) {
+        const root = await reads.root(offer);
+        const ids = await reads.groupIds(root.id);
+        const latest = await reads.latestObservation(ids);
+        const tally = await reads.tally(ids);
+        const snap = await reads.lastSnapshot(root.id);
         return {
             root,
             ids,
-            store: catalog.store(root.store_id),
-            product: catalog.product(root.product_id),
-            observations: reads.observations(ids),
+            store: await catalog.store(root.store_id),
+            product: await catalog.product(root.product_id),
+            observations: await reads.observations(ids),
             latest,
             freshness: freshness(latest, now),
-            sources: reads.sources(ids),
-            members: ids.filter((id) => id !== root.id).map((id) => reads.get(id)),
+            sources: await reads.sources(ids),
+            members: await Promise.all(ids.filter((id) => id !== root.id).map(async (id) => await reads.get(id))),
             tally,
             hotness: snap,
             decision: decideOffer(root, latest, now),
@@ -158,15 +158,15 @@ function createPublication({ config, store, reads, catalog }) {
      * price ascending), then fresh offers without a price, then stale / unobserved / expired ones —
      * an old or unknown price never sorts as if it were the price now, and unknown never sorts as 0.
      */
-    function productView(product, now = store.now()) {
-        const rows = productOfferIds.all(product.id).map((r) => offerView(reads.get(r.id), now));
+    async function productView(product, now = store.now()) {
+        const rows = await Promise.all((await productOfferIds.all(product.id)).map(async (r) => await offerView(await reads.get(r.id), now)));
         const rank = (v) => (v.root.status !== 'active' ? 4 : v.freshness.state !== 'fresh' ? 3 : (v.latest && v.latest.price != null && v.latest.currency) ? 1 : 2);
         rows.sort((a, b) => rank(a) - rank(b)
             || (rank(a) === 1 ? (a.latest.currency < b.latest.currency ? -1 : a.latest.currency > b.latest.currency ? 1 : a.latest.price_num - b.latest.price_num) : 0)
             || b.root.created_at - a.root.created_at);
         const fresh = rows.filter((v) => v.root.status === 'active' && v.freshness.state === 'fresh').map((v) => v.latest.observed_at);
         const freshest = fresh.length ? Math.max(...fresh) : null;
-        return { product, offers: rows, aliases: catalog.aliases(product.id), decision: decideProduct(product, freshest, now), freshestObservedAt: freshest };
+        return { product, offers: rows, aliases: await catalog.aliases(product.id), decision: decideProduct(product, freshest, now), freshestObservedAt: freshest };
     }
 
     function productJsonLd(pv) {

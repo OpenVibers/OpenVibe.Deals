@@ -24,7 +24,7 @@ structured data, the comparison, the feeds and Search.
 
 ## Owns
 
-The nine charter tables live in Deals' own SQLite (`DEALS_DB_PATH`):
+The nine charter tables live in Deals' own PostgreSQL database (`ov_deals` on the host's data role, ADR-035; schema in [migrations/](migrations/)):
 
 | Charter table | What it is |
 |---|---|
@@ -161,7 +161,7 @@ Snapshots are taken on every vote change, merge, unmerge and creation, and by th
 active offer of the last 14 days at **one shared `t`**, so the hot list compares numbers computed at
 the same moment.
 
-**Abuse controls (server-side, SQLite windows shared by forms and API):**
+**Abuse controls (server-side, database windows shared by forms and API):**
 
 | Control | Default |
 |---|---|
@@ -246,9 +246,11 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
 
 ## Depends on
 
-- **Packages** (pinned release tarballs): `openvibe-publishing` v0.4.0 (seo gate, JSON-LD, feeds,
-  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.53.0, `openvibe-shared` v1.25.0
-  (chrome, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.12.0 (outbox, inbox,
+- **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
+  `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
+- **Packages** (pinned release tarballs): `openvibe-publishing` v1.0.0 (seo gate, JSON-LD, feeds,
+  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.76.0, `openvibe-shared` v1.25.0
+  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.20.0 (outbox, inbox,
   webhook signatures v2, service tokens, per-actor limits).
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
@@ -370,10 +372,13 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4840 (set OV_OAUTH
 
 Production deploys with `sudo ovhost deploy deals` on the host (strategy `git-checkout`: fetch,
 fast-forward `/opt/openvibe.deals`, install on a lockfile change, restart, wait for `/api/ready`).
-The unit is `openvibe-deals.service` on `127.0.0.1:4840`, the env file `/etc/openvibe/deals.env`.
+The unit is `openvibe-deals.service` on `127.0.0.1:4840`, the env file `/etc/openvibe/deals.env`. The database is
+`ov_deals` on the host's data role (`sudo /opt/openvibe.host/roles/data/add-service.sh deals` writes its settings); the
+release migrates it at boot. The one-time move from SQLite is `scripts/migrate-to-postgres.js` (openvibe-sdk
+`runSqliteMigration`, with a `--pglite` rehearsal mode), run while the service is stopped; the old
+`/var/lib/openvibe-deals/deals.db` stays read-only for 7 days as the rollback.
 Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
-restart; afterwards `sudo ovhost rollback deals --to <sha>`. Nothing blocks a rollback: the schema
-code only adds tables and columns.
+restart; afterwards `sudo ovhost rollback deals --to <sha>`. Migrations only add tables and columns.
 
 First install (done once; kept for a rebuild):
 
