@@ -41,13 +41,14 @@ const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
 const { createInternalRoutes } = require('./http/internal');
 const { createDealsReadiness } = require('./observability');
+const { createActorLimits } = require('./http/actor-limits');
 const { createWorker } = require('./worker');
 const { assetVersion } = require('./render/layout');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VERSION = require('../package.json').version;
 
-/** opts: config, dbPath, now (clock), fetchImpl, auth, log */
+/** opts: config, dbPath, now (clock), fetchImpl, auth, log, limitsNow (the per-actor limiter's clock, tests) */
 function createApp(opts = {}) {
     const config = opts.config || configLib.load();
     const log = opts.log || console;
@@ -84,6 +85,9 @@ function createApp(opts = {}) {
     const metrics = require('openvibe-shared/metrics').instrument(app, { service: 'deals', release: release.release });
     app.locals.metrics = metrics.registry;
     app.locals.ctx = ctx;
+    // Per-actor limits (http/actor-limits.js) for the API and the page forms, counted once each router
+    // resolved req.viewer; the per-address limits below and the per-person abuse controls stay.
+    ctx.actorLimits = createActorLimits({ config, now: opts.limitsNow || (() => Date.now()), registry: metrics.registry, log });
 
     app.use(contracts.http.middleware());
     app.use(helmet({
@@ -135,6 +139,7 @@ function createApp(opts = {}) {
     }));
 
     // ── Events consumer, API ────────────────────────────────
+    // Never per-actor limited: Events pushes at its own pace, and a 429 would only make it retry and fall behind.
     app.use(createInternalRoutes({ config, store, importer }));
     app.use('/api/v1', rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false }), createApi(ctx));
 

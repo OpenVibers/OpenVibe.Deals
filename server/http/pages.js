@@ -33,9 +33,12 @@ const { ApiError, iso } = require('../domain/util');
 const PER_PAGE = 25;
 
 function createPages(ctx) {
-    const { config, store, reads, catalog, publication, listings, offers, votes, watches, flags, community, access, viewers } = ctx;
+    const { config, store, reads, catalog, publication, listings, offers, votes, watches, flags, community, access, viewers, actorLimits } = ctx;
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
+    // Per-actor limits on the forms (http/actor-limits.js), before the form is read: each shares its budget
+    // with the API route that does the same thing. Reading pages is left to the per-address limits.
+    const B = (name) => actorLimits.budget(name);
     const urls = { offerPath: publication.offerPath, productPath: publication.productPath, storePath: publication.storePath };
     const form = express.urlencoded({ extended: false, limit: '32kb' });
     const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -209,7 +212,7 @@ function createPages(ctx) {
     const back = (req) => `/d/${encodeURIComponent(req.params.slug)}`;
     const ip = (req) => req.ip || null;
 
-    router.post('/d/:slug/vote', form, wrap(async (req, res) => act(req, res, back(req), () => {
+    router.post('/d/:slug/vote', B('deals.vote'), form, wrap(async (req, res) => act(req, res, back(req), () => {
         const value = { up: 1, down: -1, remove: 0 }[String(req.body.value || '')];
         if (value === undefined) throw new ApiError(422, 'request.invalid', 'Choose hot, cold or remove');
         if (value === 0) votes.remove(req.viewer, req.params.slug, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
@@ -217,22 +220,22 @@ function createPages(ctx) {
         return `${back(req)}?done=vote`;
     })));
 
-    router.post('/d/:slug/observe', form, wrap(async (req, res) => act(req, res, back(req), () => {
+    router.post('/d/:slug/observe', B('deals.offer.observe'), form, wrap(async (req, res) => act(req, res, back(req), () => {
         offers.observe(req.viewer, req.params.slug, req.body, { ip: ip(req), traceparent: req.ov && req.ov.traceparent });
         return `${back(req)}?done=observe#history`;
     })));
 
-    router.post('/d/:slug/flag', form, wrap(async (req, res) => act(req, res, back(req), () => {
+    router.post('/d/:slug/flag', B('deals.flag.create'), form, wrap(async (req, res) => act(req, res, back(req), () => {
         flags.report(req.viewer, req.params.slug, req.body, { ip: ip(req) });
         return `${back(req)}?done=flag`;
     })));
 
-    router.post('/d/:slug/expire', form, wrap(async (req, res) => act(req, res, back(req), () => {
+    router.post('/d/:slug/expire', B('deals.offer.update'), form, wrap(async (req, res) => act(req, res, back(req), () => {
         offers.expire(req.viewer, req.params.slug, {}, { traceparent: req.ov && req.ov.traceparent });
         return `${back(req)}?done=expire`;
     })));
 
-    router.post('/d/:slug/comments', form, wrap(async (req, res) => act(req, res, back(req), async () => {
+    router.post('/d/:slug/comments', B('deals.comment.create'), form, wrap(async (req, res) => act(req, res, back(req), async () => {
         const root = reads.root(reads.mustFind(req.params.slug));
         if (root.status === 'disabled') throw new ApiError(409, 'offer.disabled', 'This deal was removed');
         const message = String(req.body.message || '').trim().slice(0, 4000);
@@ -311,7 +314,7 @@ function createPages(ctx) {
         send(req, res, 200, { title: 'Submit a deal', decision: pageDecision('/submit', { indexable: false }), body: views.submitForm({ csrf: csrf(req) }) });
     }));
 
-    router.post('/submit', form, wrap(async (req, res) => {
+    router.post('/submit', B('deals.offer.submit'), form, wrap(async (req, res) => {
         if (!formGuard(req, res, '/submit')) return;
         const b = req.body || {};
         const input = {
@@ -343,7 +346,7 @@ function createPages(ctx) {
         watchesPage(req, res);
     }));
 
-    router.post('/watches', form, wrap(async (req, res) => {
+    router.post('/watches', B('deals.watch'), form, wrap(async (req, res) => {
         if (!formGuard(req, res, '/watches')) return;
         try {
             const b = req.body || {};
@@ -355,7 +358,7 @@ function createPages(ctx) {
         }
     }));
 
-    router.post('/watches/:id/delete', form, wrap(async (req, res) => act(req, res, '/watches', () => {
+    router.post('/watches/:id/delete', B('deals.watch'), form, wrap(async (req, res) => act(req, res, '/watches', () => {
         watches.remove(req.viewer.subject, req.params.id);
         return '/watches';
     })));
@@ -377,7 +380,7 @@ function createPages(ctx) {
         });
     }));
 
-    router.post('/mod/offers/:slug/:action', form, wrap(async (req, res) => {
+    router.post('/mod/offers/:slug/:action', B('deals.offer.moderate'), form, wrap(async (req, res) => {
         if (!modGuard(req, res)) return;
         const tp = { traceparent: req.ov && req.ov.traceparent };
         await act(req, res, `/d/${encodeURIComponent(req.params.slug)}`, () => {
@@ -395,7 +398,7 @@ function createPages(ctx) {
         });
     }));
 
-    router.post('/mod/flags/:id/:action', form, wrap(async (req, res) => {
+    router.post('/mod/flags/:id/:action', B('deals.offer.moderate'), form, wrap(async (req, res) => {
         if (!modGuard(req, res)) return;
         await act(req, res, '/mod', () => {
             const status = { resolve: 'resolved', dismiss: 'dismissed' }[req.params.action];

@@ -177,6 +177,33 @@ the same moment.
 Ring flags are for moderators only (`/mod`, `GET /api/v1/flags`); they never remove votes on their
 own. One open flag per ring (or per person and offer for reports).
 
+**Per-actor limits** (`server/http/actor-limits.js`, openvibe-sdk/limits, roadmap WS-R task 4) cap
+requests, refused ones included, by who makes them, once `req.viewer` is resolved and before any work
+(before the body is read). Each write's cap sits above the abuse control for the same action, which
+keeps deciding what is recorded. Counted: a person as `user:usr_…` (their own token or cookie, or named
+by a service in `X-OV-Subject`); a first-party service relaying a signed-out visitor by the address it
+forwards; a service or app acting as itself (such as `svc:ai` for `deals.enrich_deal`) by its principal;
+a signed-out caller by address. A first-party service reading for itself is not counted on reads. Past
+a limit: `429` problem+json `rate_limited` with `Retry-After`, one `[Limits]` log line and
+`deals_rate_limited_total{limit,window}`. A page form and the API route that do the same thing share one
+budget.
+
+| Routes (API and forms) | Per caller, a minute / an hour |
+|---|---|
+| API reads | `DEALS_LIMITS_MINUTE` / `DEALS_LIMITS_HOUR` (120 / 3000) |
+| Submit | 30 / 120 |
+| Edit, expire | 30 / 300 |
+| Price observations | 40 / 200 |
+| Votes (set and remove) | 60 / 600 |
+| Flags | 30 / 120 |
+| Moderation (merge, unmerge, disable, enable, review, resolve flags) | 60 / 600 |
+| Product resolve | 60 / 1200 |
+| Watches (create and delete) | 30 / 300 |
+| Comments (sent to Community) | 20 / 300 |
+
+Never limited per actor: `/api/health`, `/api/ready`, `/release.json`, `/metrics`, sign-in, the signed
+Events deliveries at `/internal/events`, and the pages and feeds people read. `test/actor-limits.test.js`.
+
 ## Watches and saved searches
 
 `keyword` (every word must appear), `product`, `price_below` (product or words, a price **stated in
@@ -304,8 +331,8 @@ from sources registered in OpenVibe.Sources.
 - **Honesty:** no fabricated prices, currencies, availability, expiry or ratings in pages, JSON,
   JSON-LD, feeds or Search; stale and unknown are labelled; AI and imported text need a person's review
   before indexing.
-- **Abuse:** Express rate limits on `/auth`, forms and `/api/v1`, mirrored in the nginx reference;
-  `/internal/` and `/metrics` are host-local only.
+- **Abuse:** Express rate limits on `/auth`, forms and `/api/v1`, mirrored in the nginx reference, and
+  per-actor limits on the API and forms (above); `/internal/` and `/metrics` are host-local only.
 - **Known gaps:**
   - Watch notifications are events only; nobody delivers them to people until Network's consumer exists.
   - The Community thread visibility sync on disable is best effort (needs `community.comment.moderate`).

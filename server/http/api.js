@@ -50,10 +50,14 @@ function cors(origins) {
 }
 
 function createApi(ctx) {
-    const { config, reads, catalog, publication, listings, offers, votes, watches, flags, hotness, viewers, access } = ctx;
+    const { config, reads, catalog, publication, listings, offers, votes, watches, flags, hotness, viewers, access, actorLimits } = ctx;
     const router = express.Router();
     router.use(cors(config.apiCorsOrigins));
     router.use(viewers.middleware());
+    // Per-actor limits (http/actor-limits.js), once req.viewer is resolved: every read takes the defaults;
+    // each write names its budget after its capability guard and before its body is read.
+    router.use(actorLimits.reads('deals.read'));
+    const B = (name) => actorLimits.budget(name);
     router.use((req, res, next) => { privateNoStore(res); res.set('X-Robots-Tag', 'noindex'); next(); });
 
     const opts = (req) => ({ ip: req.viewer.kind === 'service' ? null : req.ip, traceparent: req.ov && req.ov.traceparent });
@@ -90,23 +94,23 @@ function createApi(ctx) {
         };
     }));
 
-    router.post('/offers', guard('deals.offer.submit'), jsonBody, run((req) => {
+    router.post('/offers', guard('deals.offer.submit'), B('deals.offer.submit'), jsonBody, run((req) => {
         needSubject(req);
         const out = offers.submit(req.viewer, req.body || {}, opts(req));
         return offerOut(out.offer);
     }, 201));
 
-    router.patch('/offers/:id', guard('deals.offer.update'), jsonBody, run((req) => offerOut(offers.update(req.viewer, req.params.id, req.body || {}, opts(req)).offer)));
+    router.patch('/offers/:id', guard('deals.offer.update'), B('deals.offer.update'), jsonBody, run((req) => offerOut(offers.update(req.viewer, req.params.id, req.body || {}, opts(req)).offer)));
 
-    router.post('/offers/:id/observations', guard('deals.offer.update'), jsonBody, run((req) => {
+    router.post('/offers/:id/observations', guard('deals.offer.update'), B('deals.offer.observe'), jsonBody, run((req) => {
         needSubject(req);
         const out = offers.observe(req.viewer, req.params.id, req.body || {}, opts(req));
         return { ...offerOut(out.offer), observation: publication.observationDto({ ...out.observation, source_kind: 'community' }) };
     }, 201));
 
-    router.post('/offers/:id/expire', guard('deals.offer.expire'), jsonBody, run((req) => offerOut(offers.expire(req.viewer, req.params.id, req.body || {}, opts(req)))));
+    router.post('/offers/:id/expire', guard('deals.offer.expire'), B('deals.offer.update'), jsonBody, run((req) => offerOut(offers.expire(req.viewer, req.params.id, req.body || {}, opts(req)))));
 
-    router.put('/offers/:id/vote', guard('deals.vote.set'), jsonBody, run((req) => {
+    router.put('/offers/:id/vote', guard('deals.vote.set'), B('deals.vote'), jsonBody, run((req) => {
         needSubject(req);
         const value = Number((req.body || {}).value);
         if (value !== 1 && value !== -1) throw new ApiError(422, 'request.invalid', 'value must be 1 or -1');
@@ -114,31 +118,31 @@ function createApi(ctx) {
         return { offer_id: r.root.id, value: r.value, previous: r.previous, changed: r.changed, votes: { up: r.tally.up, down: r.tally.down, up_weight: r.tally.upWeight, down_weight: r.tally.downWeight } };
     }));
 
-    router.delete('/offers/:id/vote', guard('deals.vote.remove'), run((req) => {
+    router.delete('/offers/:id/vote', guard('deals.vote.remove'), B('deals.vote'), run((req) => {
         needSubject(req);
         const r = votes.remove(req.viewer, req.params.id, opts(req));
         return { offer_id: r.root.id, value: 0, previous: r.previous, changed: r.changed, votes: { up: r.tally.up, down: r.tally.down, up_weight: r.tally.upWeight, down_weight: r.tally.downWeight } };
     }));
 
-    router.post('/offers/:id/flags', guard('deals.flag.create'), jsonBody, run((req) => {
+    router.post('/offers/:id/flags', guard('deals.flag.create'), B('deals.flag.create'), jsonBody, run((req) => {
         needSubject(req);
         const r = flags.report(req.viewer, req.params.id, req.body || {}, opts(req));
         return { flag: { id: r.flag.id, kind: r.flag.kind, status: r.flag.status }, created: r.created };
     }, (out) => (out.created ? 201 : 200)));
 
-    router.post('/offers/:id/merge', guard('deals.offer.merge'), jsonBody, run((req) => {
+    router.post('/offers/:id/merge', guard('deals.offer.merge'), B('deals.offer.moderate'), jsonBody, run((req) => {
         const b = req.body || {};
         const r = offers.merge(req.viewer, req.params.id, b.into, { reason: b.reason }, opts(req));
         return { ...offerOut(r.offer), merged: { id: r.merged.id, slug: r.merged.slug }, before: r.before, after: r.after };
     }));
 
-    router.post('/offers/:id/unmerge', guard('deals.offer.merge'), jsonBody, run((req) => {
+    router.post('/offers/:id/unmerge', guard('deals.offer.merge'), B('deals.offer.moderate'), jsonBody, run((req) => {
         const r = offers.unmerge(req.viewer, req.params.id, req.body || {}, opts(req));
         return { ...offerOut(r.offer), from: { id: r.from.id, slug: r.from.slug }, before: r.before, after: r.after };
     }));
 
     for (const action of ['disable', 'enable', 'review']) {
-        router.post(`/offers/:id/${action}`, guard('deals.offer.moderate'), jsonBody, run((req) => offerOut(offers[action](req.viewer, req.params.id, req.body || {}, opts(req)).offer)));
+        router.post(`/offers/:id/${action}`, guard('deals.offer.moderate'), B('deals.offer.moderate'), jsonBody, run((req) => offerOut(offers[action](req.viewer, req.params.id, req.body || {}, opts(req)).offer)));
     }
 
     router.get('/flags', guard('deals.offer.moderate'), run((req) => {
@@ -147,7 +151,7 @@ function createApi(ctx) {
         return { flags: flags.list({ status }).map(flags.dto) };
     }));
 
-    router.post('/flags/:id/resolve', guard('deals.offer.moderate'), jsonBody, run((req) => {
+    router.post('/flags/:id/resolve', guard('deals.offer.moderate'), B('deals.offer.moderate'), jsonBody, run((req) => {
         const r = flags.resolve(req.viewer, req.params.id, req.body || {}, opts(req));
         return { flag: flags.dto(r.flag), changed: r.changed };
     }));
@@ -164,7 +168,7 @@ function createApi(ctx) {
         };
     }));
 
-    router.post('/products/resolve', guard('deals.product.resolve'), jsonBody, run((req) => {
+    router.post('/products/resolve', guard('deals.product.resolve'), B('deals.product.resolve'), jsonBody, run((req) => {
         const b = req.body || {};
         const actor = req.viewer.subject || req.viewer.service || null;
         if (!actor) throw new ApiError(401, 'auth.required', 'Sign in first');
@@ -188,12 +192,12 @@ function createApi(ctx) {
 
     router.get('/watches', guard('deals.watch.read'), run((req) => { needSubject(req); return { watches: watches.list(req.viewer.subject).map(watches.dto) }; }));
 
-    router.post('/watches', guard('deals.watch.create'), jsonBody, run((req) => {
+    router.post('/watches', guard('deals.watch.create'), B('deals.watch'), jsonBody, run((req) => {
         needSubject(req);
         return { watch: watches.dto(watches.create(req.viewer.subject, req.body || {})) };
     }, 201));
 
-    router.delete('/watches/:id', guard('deals.watch.delete'), run((req) => { needSubject(req); return watches.remove(req.viewer.subject, req.params.id); }));
+    router.delete('/watches/:id', guard('deals.watch.delete'), B('deals.watch'), run((req) => { needSubject(req); return watches.remove(req.viewer.subject, req.params.id); }));
 
     router.use((req, res) => require('openvibe-contracts').http.sendProblem(res, 404, 'route.not_found', { detail: 'No such API route', ctx: req.ov }));
 
