@@ -8,7 +8,7 @@
   "port": 4840,
   "domain": "openvibe.deals",
   "contracts": "openvibe-contracts v0.53.0",
-  "packages": ["openvibe-publishing v0.4.0", "openvibe-contracts v0.53.0", "openvibe-shared v1.22.0", "openvibe-sdk v0.12.0"],
+  "packages": ["openvibe-publishing v0.4.0", "openvibe-contracts v0.53.0", "openvibe-shared v1.25.0", "openvibe-sdk v0.12.0"],
   "capabilities": [
     "deals.offer.submit",
     "deals.offer.update",

@@ -247,7 +247,7 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
 ## Depends on
 
 - **Packages** (pinned release tarballs): `openvibe-publishing` v0.4.0 (seo gate, JSON-LD, feeds,
-  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.53.0, `openvibe-shared` v1.22.0
+  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.53.0, `openvibe-shared` v1.25.0
   (chrome, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.12.0 (outbox, inbox,
   webhook signatures v2, service tokens, per-actor limits).
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
