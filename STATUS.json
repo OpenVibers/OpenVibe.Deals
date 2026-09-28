@@ -7,12 +7,8 @@
   "runtime": "node 22, express 4, better-sqlite3 11",
   "port": 4840,
   "domain": "openvibe.deals",
-  "packages": [
-    "openvibe-publishing v0.2.1",
-    "openvibe-contracts v0.33.0",
-    "openvibe-shared v1.5.1",
-    "openvibe-sdk v0.5.0"
-  ],
+  "contracts": "openvibe-contracts v0.53.0",
+  "packages": ["openvibe-publishing v0.4.0", "openvibe-contracts v0.53.0", "openvibe-shared v1.22.0", "openvibe-sdk v0.12.0"],
   "capabilities": [
     "deals.offer.submit",
     "deals.offer.update",
@@ -33,7 +29,21 @@
   "sourcesImport": "code and tests; the sources.item.read grant exists in production, but no deals-category source is enabled in OpenVibe.Sources (the seeded dealnews-daily is disabled), so nothing has been imported",
   "watchNotifications": "deals.watch.matched events only; OpenVibe.Network's notification consumer does not exist yet",
   "deployed": true,
-  "deployment": "openvibe-ovh, unit openvibe-deals, 127.0.0.1:4840 loopback only (release e72aeec); /api/ready 200 with every check ok; Network OAuth client deals and its grants exist; production database holds 0 offers. Deployed internally, not launched: openvibe.deals still serves the OpenVibe.Sites placeholder until a person verifies a deals source's terms and enables it in Sources",
+  "deployment": "Deployed with `sudo ovhost deploy deals`: unit openvibe-deals, 127.0.0.1:4840 loopback only; Network OAuth client deals and its grants exist; on 2026-09-23 /api/ready answered 200 and the production database held 0 offers. Deployed internally, not launched: openvibe.deals still serves the OpenVibe.Sites placeholder until a person verifies a deals source's terms and enables it in Sources",
   "placeholderInSites": true,
-  "updated": "2026-09-23"
+  "updated": "2026-09-28",
+  "features": [
+    "offers with timestamped price observations shown \"as of\" and stale labels",
+    "unknown prices stay unknown in pages, JSON, JSON-LD, feeds and Search",
+    "server-authoritative votes and deterministic hotness (hot@1)",
+    "duplicate merge and unmerge without losing votes or history",
+    "watches and saved searches (deals.watch.matched events; no delivery yet)",
+    "vote abuse controls and moderation queue",
+    "OpenVibe.Sources deals import with review",
+    "Community comment threads",
+    "server-rendered pages, feeds and sitemaps useful without JavaScript",
+    "/api/v1 by capability",
+    "SDK outbox events and Search index documents",
+    "per-actor limits (openvibe-sdk/limits)"
+  ]
 }

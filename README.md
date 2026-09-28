@@ -246,10 +246,10 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
 
 ## Depends on
 
-- **Packages** (pinned release tarballs): `openvibe-publishing` v0.2.1 (seo gate, JSON-LD, feeds,
-  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.33.0, `openvibe-shared` v1.5.1
-  (chrome, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.5.0 (outbox, inbox,
-  webhook signatures v2, service tokens).
+- **Packages** (pinned release tarballs): `openvibe-publishing` v0.4.0 (seo gate, JSON-LD, feeds,
+  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.53.0, `openvibe-shared` v1.22.0
+  (chrome, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.12.0 (outbox, inbox,
+  webhook signatures v2, service tokens, per-actor limits).
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
 - **OpenVibe.Sources:** `sources.item.read`; a `deals`-category source must be registered and enabled
@@ -273,6 +273,19 @@ Each grant is `[client, capability, audience]`:
 - `[deals, community.comment.moderate, openvibe.community]` (optional: hides a disabled deal's thread)
 - For OpenVibe.AI enrichment (later): `[ai, deals.offer.update, openvibe.deals]`
 - For a future Network notification consumer that reads watches: `[network, deals.watch.read, openvibe.deals]`
+
+## Capabilities
+
+Implemented here (the service manifest's `capabilities`, audience `openvibe.deals`, one per route; the
+route table is under [API](#api-apiv1-problemjson-errors)): `deals.offer.submit`, `deals.offer.update`,
+`deals.offer.expire`, `deals.offer.merge`, `deals.offer.moderate`, `deals.vote.set`,
+`deals.vote.remove`, `deals.watch.create`, `deals.watch.read`, `deals.watch.delete`,
+`deals.product.resolve` and `deals.flag.create`.
+
+Called elsewhere, as the service principal `deals`: `identity.subject.resolve` (Network),
+`events.event.publish` and, once, `events.subscription.manage` (Events), `sources.item.read`
+(Sources), `community.comment.write` and optionally `community.comment.moderate` (Community). The
+full list with audiences is under [Grants the Network must hold](#grants-the-network-must-hold).
 
 ## Acceptance (automated: `npm test`)
 
@@ -315,6 +328,8 @@ from sources registered in OpenVibe.Sources.
 
 ## Security and threat review
 
+Reporting a vulnerability: [SECURITY.md](SECURITY.md).
+
 - **Identity:** only verified Network JWTs (offline RS256 against JWKS) and service tokens for audience
   `openvibe.deals`; a bad service token is refused, never downgraded to anonymous; identity never
   comes from a body or query; `X-OV-*` headers are ignored for browsers; pages ignore service tokens.
@@ -352,6 +367,15 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4840 (set OV_OAUTH
 ```
 
 ## Deploy (for the lead)
+
+Production deploys with `sudo ovhost deploy deals` on the host (strategy `git-checkout`: fetch,
+fast-forward `/opt/openvibe.deals`, install on a lockfile change, restart, wait for `/api/ready`).
+The unit is `openvibe-deals.service` on `127.0.0.1:4840`, the env file `/etc/openvibe/deals.env`.
+Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
+restart; afterwards `sudo ovhost rollback deals --to <sha>`. Nothing blocks a rollback: the schema
+code only adds tables and columns.
+
+First install (done once; kept for a rebuild):
 
 1. **Code and config:** put the code at `/opt/openvibe.deals` and run `npm ci --omit=dev` on Node 22
    (on the host, npm 9 may rewrite `package-lock.json`; restore it with `git checkout -- package-lock.json`).
