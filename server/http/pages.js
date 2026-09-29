@@ -28,7 +28,7 @@ const ssr = require('openvibe-publishing/ssr');
 const { renderPage } = require('../render/layout');
 const views = require('../render/views');
 const { csrfToken, checkCsrf } = require('../auth/forms');
-const { ApiError, iso } = require('../domain/util');
+const { ApiError, iso } = require('../domain/values');
 
 const PER_PAGE = 25;
 

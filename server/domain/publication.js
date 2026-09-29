@@ -19,7 +19,7 @@
  * drops the price, a missing availability is omitted (never an assumed InStock).
  */
 const seo = require('openvibe-publishing/seo');
-const { iso } = require('./util');
+const { iso } = require('./values');
 
 function createPublication({ config, store, reads, catalog }) {
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);

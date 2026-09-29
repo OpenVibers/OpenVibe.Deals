@@ -8,7 +8,7 @@
  *   search   active (or all non-disabled, with expired) offers whose title/description contain every word
  *   store    a store's offers, expired ones included and marked
  */
-const { tokens } = require('./util');
+const { tokens } = require('./values');
 
 function createListings({ store }) {
     const { db } = store;

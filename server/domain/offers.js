@@ -17,7 +17,7 @@
 const {
     ApiError, newId, normalizeUrl, urlKey, domainOf, slugify, parseAmount, parseCurrency, parseEnum, parseInstant,
     text, longText, CONDITIONS, AVAILABILITY,
-} = require('./util');
+} = require('./values');
 
 const FUTURE_SKEW_MS = 5 * 60 * 1000;
 

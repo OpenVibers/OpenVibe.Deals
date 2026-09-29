@@ -9,7 +9,7 @@
  *   product an alias names, or creates a product when allowed. Two products that turn out to be the
  *   same are left to moderators (Deals does not auto-merge products).
  */
-const { ApiError, newId, slugify, text, longText } = require('./util');
+const { ApiError, newId, slugify, text, longText } = require('./values');
 
 const ALIAS_KINDS = ['gtin', 'mpn', 'sku', 'url', 'name'];
 const normAlias = (kind, v) => {

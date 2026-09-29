@@ -88,7 +88,7 @@ const { sourceItem } = require('./helpers/mocks');
         await t.ctx.importer.pull();
         assert.strictEqual((await matched(w.price)).length, before + 1);
         // Replay the whole feed from the start: same items, same revision, same retrieval → nothing.
-        await t.ctx.store.db.prepare("UPDATE import_state SET value = '0'").run();
+        await t.ctx.store.db.prepare("UPDATE deals_ingest_cursor SET cursor = 0 WHERE name = 'sources.deals.after'").run();
         await t.ctx.importer.pull();
         assert.strictEqual((await matched(w.price)).length, before + 1);
         const obsCount = (await t.ctx.store.db.prepare("SELECT COUNT(*) AS n FROM deal_price_observations o JOIN deal_offers f ON f.id = o.offer_id WHERE f.url = 'https://audio.example/wh'").get()).n;

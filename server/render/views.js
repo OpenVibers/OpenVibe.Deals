@@ -8,7 +8,7 @@
  * an unknown one says "not stated". Nothing here calls a price "current".
  */
 const { html, raw, renderMarkdown, paginationHtml, breadcrumbsHtml } = require('openvibe-publishing/ssr');
-const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/util');
+const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/values');
 
 const pad = (n) => String(n).padStart(2, '0');
 function when(ms) {

@@ -1,0 +1,178 @@
+{
+  "offers": [
+    {
+      "url": "https://coffee.example/espresso",
+      "title": "Espresso machine",
+      "description": null,
+      "status": "active",
+      "origin": "import",
+      "review_state": "pending",
+      "text_origin": "imported",
+      "category": null,
+      "expires_at": 1790812800000,
+      "disabled_reason": null,
+      "product": null,
+      "observations": [
+        {
+          "price": "249.00",
+          "currency": "EUR",
+          "shipping": null,
+          "condition": "refurbished",
+          "availability": "in_stock",
+          "origin": "import",
+          "observed_at": 1790074800000,
+          "source_revision": 1
+        },
+        {
+          "price": "229.00",
+          "currency": "EUR",
+          "shipping": null,
+          "condition": null,
+          "availability": "limited",
+          "origin": "import",
+          "observed_at": 1790085600000,
+          "source_revision": 2
+        }
+      ],
+      "sources": [
+        {
+          "kind": "sources_item",
+          "ref_id": "itm_01K5GOLDEN00000000000A1",
+          "ref_part": "",
+          "ref_revision": 2,
+          "source_key": "shop-jsonld",
+          "url": "https://coffee.example/espresso",
+          "label": "Espresso machine",
+          "retrieved_at": 1790085600000,
+          "removed_at": null,
+          "removed_reason": null
+        }
+      ]
+    },
+    {
+      "url": "https://kettles.example/acme-2000",
+      "title": "Acme Kettle 2000 — Kettles",
+      "description": null,
+      "status": "active",
+      "origin": "import",
+      "review_state": "pending",
+      "text_origin": "imported",
+      "category": null,
+      "expires_at": null,
+      "disabled_reason": null,
+      "product": {
+        "name": "Acme Kettle 2000",
+        "brand": "Acme",
+        "category": null
+      },
+      "observations": [
+        {
+          "price": "39.99",
+          "currency": "USD",
+          "shipping": null,
+          "condition": null,
+          "availability": "in_stock",
+          "origin": "import",
+          "observed_at": 1790078400000,
+          "source_revision": 1
+        }
+      ],
+      "sources": [
+        {
+          "kind": "sources_item",
+          "ref_id": "itm_01K5GOLDEN00000000000A2",
+          "ref_part": "kettles.example/acme-2000",
+          "ref_revision": 1,
+          "source_key": "shop-jsonld",
+          "url": "https://kettles.example/acme-2000",
+          "label": "Acme Kettle 2000",
+          "retrieved_at": 1790078400000,
+          "removed_at": null,
+          "removed_reason": null
+        }
+      ]
+    },
+    {
+      "url": "https://market.example/acme-2000",
+      "title": "Acme Kettle 2000 — Market",
+      "description": null,
+      "status": "active",
+      "origin": "import",
+      "review_state": "pending",
+      "text_origin": "imported",
+      "category": null,
+      "expires_at": null,
+      "disabled_reason": null,
+      "product": {
+        "name": "Acme Kettle 2000",
+        "brand": "Acme",
+        "category": null
+      },
+      "observations": [
+        {
+          "price": null,
+          "currency": null,
+          "shipping": null,
+          "condition": null,
+          "availability": "out_of_stock",
+          "origin": "import",
+          "observed_at": 1790078400000,
+          "source_revision": 1
+        }
+      ],
+      "sources": [
+        {
+          "kind": "sources_item",
+          "ref_id": "itm_01K5GOLDEN00000000000A2",
+          "ref_part": "market.example/acme-2000",
+          "ref_revision": 1,
+          "source_key": "shop-jsonld",
+          "url": "https://kettles.example/acme-2000",
+          "label": "Acme Kettle 2000",
+          "retrieved_at": 1790078400000,
+          "removed_at": null,
+          "removed_reason": null
+        }
+      ]
+    },
+    {
+      "url": "https://news.example/garden",
+      "title": "Weekend sale on garden tools",
+      "description": null,
+      "status": "disabled",
+      "origin": "import",
+      "review_state": "pending",
+      "text_origin": "imported",
+      "category": null,
+      "expires_at": null,
+      "disabled_reason": "source item removed: licence withdrawn",
+      "product": null,
+      "observations": [
+        {
+          "price": null,
+          "currency": null,
+          "shipping": null,
+          "condition": null,
+          "availability": null,
+          "origin": "import",
+          "observed_at": 1790078400000,
+          "source_revision": 1
+        }
+      ],
+      "sources": [
+        {
+          "kind": "sources_item",
+          "ref_id": "itm_01K5GOLDEN00000000000A3",
+          "ref_part": "",
+          "ref_revision": 1,
+          "source_key": "shop-jsonld",
+          "url": "https://news.example/garden",
+          "label": "Weekend sale on garden tools",
+          "retrieved_at": 1790078400000,
+          "removed_at": 1790085600000,
+          "removed_reason": "licence withdrawn"
+        }
+      ]
+    }
+  ]
+}

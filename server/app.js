@@ -21,7 +21,7 @@ const { createSsoClient } = require('openvibe-sdk/sso');
 const { createViewerResolver } = require('./auth/viewer');
 const { createPeople } = require('./clients/network');
 const { createCommunity } = require('./clients/community');
-const { createSources } = require('./clients/sources');
+const { createSourcesClient } = require('openvibe-publishing/ingest');
 const { createServiceOutbox } = require('openvibe-sdk/events');
 const { createIndexNow } = require('openvibe-shared/indexnow');
 const { createReads } = require('./domain/reads');
@@ -36,11 +36,11 @@ const { createOffers } = require('./domain/offers');
 const { createFlags } = require('./domain/flags');
 const { createVotes } = require('./domain/votes');
 const { createListings } = require('./domain/listings');
-const { createImporter } = require('./domain/importer');
+const { createImporter } = require('./domain/source-items');
 const { createPages } = require('./http/pages');
 const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
-const { createInternalRoutes } = require('./http/internal');
+const { createEvents } = require('./http/events');
 const { createDealsReadiness } = require('./observability');
 const { createActorLimits } = require('./http/actor-limits');
 const { createWorker } = require('./worker');
@@ -65,7 +65,7 @@ async function createApp(opts = {}) {
     });
     const people = createPeople({ store, config, fetchImpl });
     const community = createCommunity({ store, config, fetchImpl });
-    const sources = createSources({ config, fetchImpl });
+    const sources = createSourcesClient({ config, fetchImpl });
     const reads = createReads({ store });
     const catalog = createCatalog({ store });
     const publication = createPublication({ config, store, reads, catalog });
@@ -75,7 +75,7 @@ async function createApp(opts = {}) {
     const indexnow = opts.indexnow !== undefined ? opts.indexnow : createIndexNow({
         host: config.baseUrl, key: config.indexnowKey, fetch: fetchImpl, log,
     });
-    const indexing = createIndexing({ store, publication, outbox, catalog, indexnow });
+    const indexing = createIndexing({ config, store, publication, outbox, catalog, indexnow });
     const hotness = createHotness({ store, reads });
     const watches = createWatches({ config, store, reads, catalog, publication, outbox });
     const limits = createLimits({ config, store });
@@ -168,7 +168,7 @@ async function createApp(opts = {}) {
 
     // ── Events consumer, API ────────────────────────────────
     // Never per-actor limited: Events pushes at its own pace, and a 429 would only make it retry and fall behind.
-    app.use(createInternalRoutes({ config, store, importer }));
+    app.use(createEvents({ config, store, importer }));
     app.use('/api/v1', rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false }), createApi(ctx));
 
     // ── Discovery, public pages ─────────────────────────────

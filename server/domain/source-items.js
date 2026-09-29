@@ -3,10 +3,15 @@
 /**
  * Imports deals-category items from OpenVibe.Sources.
  *
- * The truth is Sources' change feed (GET /api/v1/items?category=deals&after=<cursor>): the importer
- * pulls pages in change order and keeps its cursor in import_state. sources.item.* events delivered
- * to /internal/events only wake the pull early (they carry no prices), so a lost or repeated event
- * changes nothing.
+ * The truth is Sources' change feed (the chassis' pullChanges: GET /api/v1/items in change order from
+ * the cursor in deals_ingest_cursor): the importer keeps its cursor there and pages through it.
+ * sources.item.* events delivered to /internal/events only wake the pull early (they carry no prices),
+ * so a lost or repeated event changes nothing.
+ *
+ * The chassis (openvibe-publishing/ingest) owns the Sources client, the change cursor and the pull
+ * loop (one transaction per page, one savepoint per item); this module keeps Deals' domain half: what
+ * a Sources item becomes in Deals' tables (the mapping below, its stated-value parsing and its
+ * observations).
  *
  * Item → offer mapping (values exactly as the source stated them; missing = null):
  *   kind offer    one offer: fields.price + fields.currency, availability / condition (schema.org
@@ -26,18 +31,25 @@
  * Imported text is third-party: review_state = pending, so the page is noindex until a person
  * reviews it.
  */
+const { createChangeCursor, pullChanges } = require('openvibe-publishing/ingest');
 const {
     normalizeUrl, urlKey, parseAmount, SCHEMA_AVAILABILITY, SCHEMA_CONDITION, iso,
-} = require('./util');
+} = require('./values');
 
-const CURSOR_KEY = 'sources.deals.after';
+const CURSOR = 'sources.deals.after';
+
+/** importItem's tag(s) → the chassis' three pull outcomes ('applied' | 'hold' | 'removed'). */
+function pullOutcomeFor(out) {
+    const tags = String(out).split(',');
+    if (tags.includes('removed') || tags.includes('removed:unknown')) return 'removed';
+    if (tags.every((t) => t.startsWith('skipped'))) return 'hold';
+    return 'applied';
+}
 
 function createImporter({ config, store, reads, catalog, offers, indexing, sources, log = console }) {
     const { db } = store;
+    const cursor = createChangeCursor(db, { prefix: 'deals', now: store.now });
     const q = {
-        getState: db.prepare('SELECT value FROM import_state WHERE key = ?'),
-        setState: db.prepare(`INSERT INTO import_state (key, value, updated_at) VALUES (?, ?, ?)
-                              ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`),
         sourceRow: db.prepare("SELECT * FROM deal_offer_sources WHERE kind = 'sources_item' AND ref_service = 'sources' AND ref_id = ? AND ref_part = ?"),
         itemRows: db.prepare("SELECT * FROM deal_offer_sources WHERE kind = 'sources_item' AND ref_service = 'sources' AND ref_id = ? AND removed_at IS NULL"),
         bumpSource: db.prepare('UPDATE deal_offer_sources SET ref_revision = ?, retrieved_at = ?, label = COALESCE(?, label), updated_at = ? WHERE id = ?'),
@@ -54,7 +66,10 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
     let running = null;
     let kickTimer = null;
 
-    const cursor = async () => Number((await q.getState.get(CURSOR_KEY) || {}).value || 0);
+    // The chassis client knows it is configured from the secret + URL; Deals' own switch (DEALS_IMPORT)
+    // is beside it.
+    const enabled = () => Boolean(sources.enabled && config.sources.enabled);
+    const cursorNow = async () => await cursor.get(CURSOR);
 
     function amount(v) { try { return parseAmount(v, 'price'); } catch { return null; } }
     function currencyOf(v) { return typeof v === 'string' && /^[A-Z]{3}$/.test(v) ? v : null; }
@@ -122,7 +137,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         return touched.length ? 'removed' : 'removed:unknown';
     }
 
-    /** One item, inside a transaction. Returns what happened (for logs and tests). */
+    /** One item, inside the caller's transaction (the chassis' per-item savepoint). */
     async function importItem(item) {
         if (!item || item.category !== 'deals') return 'skipped:category';
         if (item.removed) return await removeItem(item);
@@ -181,31 +196,34 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         return outcomes.join(',');
     }
 
-    const importOne = async (item) => await db.tx(async () => await importItem(item));
-
-    /** Pull the change feed from the cursor. Never throws; the cursor only moves past applied items. */
+    /**
+     * Pull the change feed from the cursor. The chassis reads pages, runs each item in its own
+     * savepoint and moves the cursor only past applied pages; the cursor is never reset to zero. This
+     * module tallies its own domain outcome tags and never throws (the cursor stays put on a failure).
+     */
     async function pull() {
-        if (!sources.enabled) return { skipped: 'import off' };
+        if (!enabled()) return { skipped: 'import off' };
         if (running) return running;
         running = (async () => {
             const summary = { pages: 0, items: 0, outcomes: {} };
             try {
-                for (let p = 0; p < config.sources.maxPages; p++) {
-                    const after = await cursor();
-                    const page = await sources.items({ after, limit: config.sources.pageSize });
-                    summary.pages++;
-                    await store.tx(async () => {
-                        for (const item of page.items || []) {
-                            let out;
-                            // Each item in its own savepoint: one unreadable item is reported, not a stuck cursor.
-                            try { out = await importOne(item); } catch (err) { out = 'failed'; log.warn(`[Deals] import of ${item && item.id} failed: ${err.message}`); }
-                            summary.items++;
-                            for (const o of out.split(',')) summary.outcomes[o] = (summary.outcomes[o] || 0) + 1;
+                const res = await pullChanges({
+                    db, cursor, source: sources, name: CURSOR,
+                    maxPages: config.sources.maxPages, pageSize: config.sources.pageSize,
+                    apply: async (item) => {
+                        const out = await importItem(item);
+                        for (const o of String(out).split(',')) summary.outcomes[o] = (summary.outcomes[o] || 0) + 1;
+                        return pullOutcomeFor(out);
+                    },
+                    onItem: (item, err, outcome) => {
+                        summary.items++;
+                        if (outcome === 'failed') {
+                            summary.outcomes.failed = (summary.outcomes.failed || 0) + 1;
+                            log.warn(`[Deals] import of ${item && item.id} failed: ${err && err.message ? err.message : 'error'}`);
                         }
-                        if (Number.isFinite(page.next_after) && page.next_after > after) await q.setState.run(CURSOR_KEY, String(page.next_after), store.now());
-                    });
-                    if (!page.more) break;
-                }
+                    },
+                });
+                summary.pages = res.pages;
                 lastError = null;
             } catch (err) {
                 lastError = err.message;
@@ -225,15 +243,15 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
      * A source that has not been fetched successfully simply lets the offer go stale.
      */
     async function refresh() {
-        if (!sources.enabled) return { skipped: 'import off' };
+        if (!enabled()) return { skipped: 'import off' };
         const due = await q.refreshDue.all(store.now() - config.freshnessMs / 2, config.sources.refreshBatch);
         const out = { checked: 0, outcomes: {} };
         for (const { ref_id: id } of due) {
             try {
-                const data = await sources.item(id);
+                const data = await sources.getItem(id);
                 out.checked++;
                 const o = await store.tx(async () => await importItem(data.item));
-                for (const x of o.split(',')) out.outcomes[x] = (out.outcomes[x] || 0) + 1;
+                for (const x of String(o).split(',')) out.outcomes[x] = (out.outcomes[x] || 0) + 1;
             } catch (err) {
                 if (err.status === 404) continue;
                 lastError = err.message;
@@ -250,9 +268,9 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
     }
 
     return {
-        pull, refresh, kick, importItem, cursor,
-        status: async () => ({ enabled: sources.enabled, cursor: await cursor(), last_error: lastError, last_run_at: iso(lastRunAt) }),
+        pull, refresh, kick, importItem, cursor: cursorNow,
+        status: async () => ({ enabled: enabled(), cursor: await cursorNow(), last_error: lastError, last_run_at: iso(lastRunAt) }),
     };
 }
 
-module.exports = { createImporter };
+module.exports = { createImporter, CURSOR };

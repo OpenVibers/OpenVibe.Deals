@@ -8,7 +8,7 @@
  * votes — is read across the group, and unmerging (clearing the pointer) gives B back exactly what
  * it had. A vote a person cast on both A and B counts once: their most recent row in the group.
  */
-const { ApiError } = require('./util');
+const { ApiError } = require('./values');
 
 function createReads({ store }) {
     const { db } = store;

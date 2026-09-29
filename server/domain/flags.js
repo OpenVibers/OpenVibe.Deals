@@ -7,7 +7,7 @@
  * noise. Flags never change an offer by themselves; a moderator decides (expire, disable, merge,
  * dismiss).
  */
-const { ApiError, newId, text, iso } = require('./util');
+const { ApiError, newId, text, iso } = require('./values');
 
 const USER_KINDS = ['expired', 'price_wrong', 'spam', 'duplicate', 'other'];
 

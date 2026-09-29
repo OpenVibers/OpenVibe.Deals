@@ -6,17 +6,20 @@
  *
  *   emitOffer('deals.offer.created'|'deals.offer.updated'|'deals.offer.expired', offer, …)
  *   indexOffer(offer)     deals.index_document.upserted|deleted for the canonical offer, or a
- *                         tombstone for a merged one. The openvibe-publishing sequencer gives the
- *                         same document the same revision, so re-sending an unchanged document emits
- *                         nothing; a document that changed (text, status, freshness, indexability)
- *                         gets revision + 1 and one event.
+ *                         tombstone for a merged one. The chassis (openvibe-publishing/publication)
+ *                         owns the mechanics — the sequencer revision, the search.index-document@1
+ *                         event, the outbox write and the IndexNow ping — on the caller's transaction
+ *                         handle, so the same document gets the same revision and re-sending an
+ *                         unchanged document emits nothing. A document that changed (text, status,
+ *                         freshness, indexability) gets revision + 1 and one event.
  *   indexProduct(id)      the same for product pages.
  *
- * When an indexable page appears, changes or disappears it also tells IndexNow (openvibe-shared/indexnow,
- * injected at boot): the page's path and the sitemap. Off without a key.
+ * When an indexable page appears, changes or disappears the chassis also tells IndexNow
+ * (openvibe-shared/indexnow, injected at boot): the page's path and the sitemap. Off without a key.
  */
 const hooks = require('openvibe-publishing/index-hooks');
-const { iso } = require('./util');
+const { createPublication: createPublicationGlue } = require('openvibe-publishing/publication');
+const { iso } = require('./values');
 
 function actorRef(actor) {
     const s = String(actor || '');
@@ -25,17 +28,10 @@ function actorRef(actor) {
     return { type: 'service', id: 'deals' };
 }
 
-function createIndexing({ store, publication, outbox, catalog, indexnow = null }) {
+function createIndexing({ config, store, publication, outbox, catalog, indexnow = null }) {
     const { sequencer, db } = store;
-
-    /**
-     * IndexNow: a public, indexable page appeared, changed or went away — tell the engines its path
-     * (and the sitemap, which lists it). pingSoon never throws and is a no-op without a key, so it can
-     * never take a write down. A draft, private or noindex page is never announced.
-     */
-    function announce(path) {
-        if (indexnow && indexnow.enabled) indexnow.pingSoon([publication.abs(path), publication.abs('/sitemap.xml')]);
-    }
+    // The chassis owns the mechanics; Deals' gate, document builder and canonical paths stay here.
+    const glue = createPublicationGlue({ owner: 'deals', sequencer, outbox, baseUrl: config.baseUrl, indexnow, db, now: store.now });
 
     function latestPayload(v) {
         return v.latest ? { price: v.latest.price, currency: v.latest.currency, availability: v.latest.availability, observed_at: iso(v.latest.observed_at) } : null;
@@ -60,11 +56,6 @@ function createIndexing({ store, publication, outbox, catalog, indexnow = null }
                 ...extra,
             },
         }, { traceparent });
-    }
-
-    async function emitIfNew(doc, before) {
-        if (before != null && doc.revision === before) return null;
-        return await outbox.emit(hooks.indexEvent({ document: doc, now: store.now() }));
     }
 
     function offerDocument(v) {
@@ -96,30 +87,16 @@ function createIndexing({ store, publication, outbox, catalog, indexnow = null }
     async function indexOffer(offer) {
         if (!offer) return null;
         if (offer.merged_into) {
-            const before = await sequencer.current('deals', 'offer', offer.id);
-            const sent = await emitIfNew(await sequencer.stamp(db, hooks.tombstone({ owner: 'deals', type: 'offer', id: offer.id, revision: 0 })), before);
-            // A merge is a delete: the duplicate's page goes away. Announce it only if Search had it.
-            if (sent && before != null) announce(publication.offerPath(offer));
-            return sent;
+            // A merge is a delete: the duplicate's page goes away (announced only if Search had it).
+            return await glue.tombstone(db, { type: 'offer', id: offer.id, page: publication.offerPath(offer) });
         }
         const v = await publication.offerView(offer);
-        const before = await sequencer.current('deals', 'offer', v.root.id);
-        const sent = await emitIfNew(await sequencer.stamp(db, offerDocument(v)), before);
-        if (sent) {
-            // An indexable page appears or changes; a page Search already had that is now explicitly
-            // removed (a takedown) disappeared. An expired offer stays published-but-noindex, so it is
-            // not announced — a noindex page is never pinged.
-            const indexable = v.root.status === 'active' && v.decision.indexable;
-            const removed = v.root.status === 'disabled' && before != null;
-            if (indexable || removed) announce(publication.offerPath(v.root));
-        }
-        return sent;
+        return await glue.index(db, { document: offerDocument(v), page: publication.offerPath(v.root) });
     }
 
     async function indexProduct(product) {
         if (!product) return null;
         const pv = await publication.productView(product);
-        const before = await sequencer.current('deals', 'product', product.id);
         const lines = pv.offers.filter((v) => v.root.status === 'active').slice(0, 20).map((v) => `${v.root.title}${v.latest && v.latest.price != null ? ` — ${v.latest.price} ${v.latest.currency || ''} as of ${iso(v.latest.observed_at)}` : ''}`);
         const doc = hooks.buildIndexDocument({
             owner: 'deals', type: 'product', id: product.id, revision: 0, state: 'published', visibility: 'public',
@@ -132,11 +109,7 @@ function createIndexing({ store, publication, outbox, catalog, indexnow = null }
             publishedAt: product.created_at,
             updatedAt: pv.freshestObservedAt || product.updated_at,
         });
-        const sent = await emitIfNew(await sequencer.stamp(db, doc), before);
-        // A product page appears or changes while indexable; one Search had that is now no longer
-        // indexable (its last fresh offer went) disappeared.
-        if (sent && (pv.decision.indexable || before != null)) announce(publication.productPath(product));
-        return sent;
+        return await glue.index(db, { document: doc, page: publication.productPath(product) });
     }
 
     /** After any change to an offer: its index document and its product's. */

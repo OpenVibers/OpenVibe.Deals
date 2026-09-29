@@ -19,7 +19,7 @@
  *                               within DEALS_RING_WINDOW_MIN minutes of each other each time
  */
 const crypto = require('crypto');
-const { ApiError } = require('./util');
+const { ApiError } = require('./values');
 
 const DAY = 24 * 3600 * 1000;
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

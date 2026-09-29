@@ -6,7 +6,7 @@
  */
 const express = require('express');
 const contracts = require('openvibe-contracts');
-const { ApiError } = require('../domain/util');
+const { ApiError } = require('../domain/values');
 
 /** Wrap a JSON handler: its return value is the body; errors become problems. */
 function run(fn, status = 200) {

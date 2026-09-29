@@ -10,7 +10,7 @@
  * IP addresses are never stored: ipHash() is an HMAC under DEALS_IP_HASH_SECRET, truncated.
  */
 const crypto = require('crypto');
-const { ApiError } = require('./util');
+const { ApiError } = require('./values');
 
 const fallbackKey = crypto.randomBytes(32);
 

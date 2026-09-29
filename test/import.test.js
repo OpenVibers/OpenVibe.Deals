@@ -70,7 +70,7 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
     await check('replaying the feed changes nothing (same revision, same retrieval)', async () => {
         const count = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_price_observations').get()).n;
         const events = (await t.events()).length;
-        await t.ctx.store.db.prepare("UPDATE import_state SET value = '0'").run();
+        await t.ctx.store.db.prepare("UPDATE deals_ingest_cursor SET cursor = 0 WHERE name = 'sources.deals.after'").run();
         const s = await t.ctx.importer.pull();
         assert.deepStrictEqual(s.outcomes, { unchanged: 4 });
         assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_price_observations').get()).n, count);

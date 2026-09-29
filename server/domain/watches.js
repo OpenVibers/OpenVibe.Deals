@@ -21,7 +21,7 @@
  * Deals never emails: deals.watch.matched is an internal event for OpenVibe.Network's notification
  * consumer (future work).
  */
-const { ApiError, newId, text, tokens, parseAmount, parseCurrency, iso } = require('./util');
+const { ApiError, newId, text, tokens, parseAmount, parseCurrency, iso } = require('./values');
 
 const KINDS = ['keyword', 'product', 'price_below', 'search'];
 

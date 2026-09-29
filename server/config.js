@@ -89,6 +89,7 @@ function load(env = process.env) {
         // OpenVibe.Sources: deals-category items (pull by change cursor; events only wake the pull).
         sources: {
             internalUrl: trim(env.OV_SOURCES_INTERNAL_URL || 'http://127.0.0.1:4720'),
+            category: 'deals',
             enabled: env.DEALS_IMPORT !== 'off',
             intervalMs: int(env.DEALS_IMPORT_INTERVAL_MS, 5 * 60 * 1000),
             pageSize: int(env.DEALS_IMPORT_PAGE_SIZE, 100),
