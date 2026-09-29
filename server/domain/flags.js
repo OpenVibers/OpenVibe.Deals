@@ -72,7 +72,7 @@ function createFlags({ config, store, reads, limits, access, publication, logAct
         const actor = viewer.subject || viewer.service;
         return await store.tx(async () => {
             await q.resolve.run(status, actor, store.now(), text(resolution, { max: 300 }), store.now(), f.id);
-            logAction(`flag.${status === 'resolved' ? 'resolve' : 'dismiss'}`, { offerId: f.offer_id, actor, reason: resolution || null, before: { flag: f.id, status: 'open' }, after: { status } });
+            await logAction(`flag.${status === 'resolved' ? 'resolve' : 'dismiss'}`, { offerId: f.offer_id, actor, reason: resolution || null, before: { flag: f.id, status: 'open' }, after: { status } });
             // A moderator's decision on a report goes to Network's moderation audit log (ADR-022).
             if (outbox) {
                 const person = viewer.subject && /^usr_/.test(viewer.subject) ? viewer.subject : null;
