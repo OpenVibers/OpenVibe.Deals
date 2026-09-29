@@ -250,7 +250,7 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
 - **Packages** (pinned release tarballs): `openvibe-publishing` v1.0.0 (seo gate, JSON-LD, feeds,
   sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.79.0, `openvibe-shared` v2.0.0
-  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.25.0 (sso, outbox,
+  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.25.1 (sso, outbox,
   inbox, webhook signatures v2, service tokens, per-actor limits).
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
