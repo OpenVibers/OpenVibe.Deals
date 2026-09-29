@@ -11,6 +11,9 @@
  *                         nothing; a document that changed (text, status, freshness, indexability)
  *                         gets revision + 1 and one event.
  *   indexProduct(id)      the same for product pages.
+ *
+ * When an indexable page appears, changes or disappears it also tells IndexNow (openvibe-shared/indexnow,
+ * injected at boot): the page's path and the sitemap. Off without a key.
  */
 const hooks = require('openvibe-publishing/index-hooks');
 const { iso } = require('./util');
@@ -22,8 +25,17 @@ function actorRef(actor) {
     return { type: 'service', id: 'deals' };
 }
 
-function createIndexing({ store, publication, outbox, catalog }) {
+function createIndexing({ store, publication, outbox, catalog, indexnow = null }) {
     const { sequencer, db } = store;
+
+    /**
+     * IndexNow: a public, indexable page appeared, changed or went away — tell the engines its path
+     * (and the sitemap, which lists it). pingSoon never throws and is a no-op without a key, so it can
+     * never take a write down. A draft, private or noindex page is never announced.
+     */
+    function announce(path) {
+        if (indexnow && indexnow.enabled) indexnow.pingSoon([publication.abs(path), publication.abs('/sitemap.xml')]);
+    }
 
     function latestPayload(v) {
         return v.latest ? { price: v.latest.price, currency: v.latest.currency, availability: v.latest.availability, observed_at: iso(v.latest.observed_at) } : null;
@@ -85,11 +97,23 @@ function createIndexing({ store, publication, outbox, catalog }) {
         if (!offer) return null;
         if (offer.merged_into) {
             const before = await sequencer.current('deals', 'offer', offer.id);
-            return await emitIfNew(await sequencer.stamp(db, hooks.tombstone({ owner: 'deals', type: 'offer', id: offer.id, revision: 0 })), before);
+            const sent = await emitIfNew(await sequencer.stamp(db, hooks.tombstone({ owner: 'deals', type: 'offer', id: offer.id, revision: 0 })), before);
+            // A merge is a delete: the duplicate's page goes away. Announce it only if Search had it.
+            if (sent && before != null) announce(publication.offerPath(offer));
+            return sent;
         }
         const v = await publication.offerView(offer);
         const before = await sequencer.current('deals', 'offer', v.root.id);
-        return await emitIfNew(await sequencer.stamp(db, offerDocument(v)), before);
+        const sent = await emitIfNew(await sequencer.stamp(db, offerDocument(v)), before);
+        if (sent) {
+            // An indexable page appears or changes; a page Search already had that is now explicitly
+            // removed (a takedown) disappeared. An expired offer stays published-but-noindex, so it is
+            // not announced — a noindex page is never pinged.
+            const indexable = v.root.status === 'active' && v.decision.indexable;
+            const removed = v.root.status === 'disabled' && before != null;
+            if (indexable || removed) announce(publication.offerPath(v.root));
+        }
+        return sent;
     }
 
     async function indexProduct(product) {
@@ -108,7 +132,11 @@ function createIndexing({ store, publication, outbox, catalog }) {
             publishedAt: product.created_at,
             updatedAt: pv.freshestObservedAt || product.updated_at,
         });
-        return await emitIfNew(await sequencer.stamp(db, doc), before);
+        const sent = await emitIfNew(await sequencer.stamp(db, doc), before);
+        // A product page appears or changes while indexable; one Search had that is now no longer
+        // indexable (its last fresh offer went) disappeared.
+        if (sent && (pv.decision.indexable || before != null)) announce(publication.productPath(product));
+        return sent;
     }
 
     /** After any change to an offer: its index document and its product's. */

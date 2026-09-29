@@ -38,7 +38,8 @@ function load(env = process.env) {
         },
 
         // PostgreSQL (ADR-035): DATABASE_URL serves (PgBouncer), DATABASE_DIRECT_URL migrates (owner role).
-        db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '' },
+        // pgliteDir is the dev/test embedded-database directory (a test gives the spawned server its own).
+        db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '', pgliteDir: env.DEALS_PGLITE_DIR || '' },
         valkey: { url: env.VALKEY_URL || '', prefix: env.VALKEY_PREFIX || 'ov:deals:' },
 
         // OpenVibe.Network: SSO (OAuth2 authorization server), JWKS, client-credentials tokens.
@@ -109,6 +110,11 @@ function load(env = process.env) {
             intervalMs: int(env.DEALS_WORKER_INTERVAL_MS, 10 * 60 * 1000),
             hotWindowDays: int(env.DEALS_HOT_WINDOW_DAYS, 14),
         },
+
+        // IndexNow (openvibe-shared/indexnow): when INDEXNOW_KEY is set the key file is served at
+        // /<key>.txt and an indexable deal or product page appearing, changing or disappearing pings
+        // the engines. Unset (or empty) → off: nothing is mounted and nothing is sent.
+        indexnowKey: String(env.INDEXNOW_KEY || '').trim(),
 
         // Browser origins that may call /api/v1 with a Bearer Network JWT (no cookies cross origins).
         apiCorsOrigins: list(env.API_CORS_ORIGINS || 'https://openvibe.network,https://openvibe.live,https://openvibe.community,https://openvibe.coupons'),

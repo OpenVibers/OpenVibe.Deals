@@ -237,6 +237,10 @@ moderator records a review (a `usr_` subject; a service cannot review).
   explains observations and the JSON twins.
 - AI-assisted text (`X-OV-Origin: ai`, e.g. OpenVibe.AI's `deals.enrich_deal`) is stored separately
   (`ai_summary`), disclosed on the page and `noindex` until a person reviews it.
+- IndexNow (`openvibe-shared/indexnow`): with `INDEXNOW_KEY` set, the key file is served at
+  `/<key>.txt` and an indexable deal or product page appearing, changing or disappearing pings the
+  engines with the page's path and `/sitemap.xml`. Unset, the feature is off — nothing is mounted and
+  nothing is sent. Drafts, private and noindex pages are never pinged (`test/indexnow.test.js`).
 
 ### Caching
 

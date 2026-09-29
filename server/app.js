@@ -23,6 +23,7 @@ const { createPeople } = require('./clients/network');
 const { createCommunity } = require('./clients/community');
 const { createSources } = require('./clients/sources');
 const { createServiceOutbox } = require('openvibe-sdk/events');
+const { createIndexNow } = require('openvibe-shared/indexnow');
 const { createReads } = require('./domain/reads');
 const { createCatalog } = require('./domain/catalog');
 const { createPublication } = require('./domain/publication');
@@ -68,7 +69,13 @@ async function createApp(opts = {}) {
     const reads = createReads({ store });
     const catalog = createCatalog({ store });
     const publication = createPublication({ config, store, reads, catalog });
-    const indexing = createIndexing({ store, publication, outbox, catalog });
+    // IndexNow (openvibe-shared/indexnow): created once at boot from INDEXNOW_KEY; unset → off
+    // (nothing mounted, nothing sent). The key file is served at /<key>.txt and indexing.js pings the
+    // engines when an indexable deal or product page appears, changes or goes away.
+    const indexnow = opts.indexnow !== undefined ? opts.indexnow : createIndexNow({
+        host: config.baseUrl, key: config.indexnowKey, fetch: fetchImpl, log,
+    });
+    const indexing = createIndexing({ store, publication, outbox, catalog, indexnow });
     const hotness = createHotness({ store, reads });
     const watches = createWatches({ config, store, reads, catalog, publication, outbox });
     const limits = createLimits({ config, store });
@@ -90,7 +97,7 @@ async function createApp(opts = {}) {
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, store, offers, hotness, indexing, listings, importer, limits, log });
 
-    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, auth, viewers, worker };
+    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, auth, viewers, worker, indexnow };
 
     const app = express();
     app.disable('x-powered-by');
@@ -138,6 +145,9 @@ async function createApp(opts = {}) {
     release.mount(app, { registry: metrics.registry });
     const readiness = createDealsReadiness({ store, jwksUrl, outbox, importer, worker, limits, release: release.release, valkey: ctx.valkey, log });
     app.get('/api/ready', readiness.handler);
+
+    // GET /<key>.txt — the IndexNow key file (only when a key is configured; it serves itself).
+    if (indexnow.enabled) app.use(indexnow.keyFile);
 
     // ── Sign-in (OAuth2 client of OpenVibe.Network) ─────────
     app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));

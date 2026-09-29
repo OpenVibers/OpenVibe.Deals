@@ -44,14 +44,16 @@ const CHARTER_TABLES = ['deal_products', 'deal_product_aliases', 'deal_offers', 
 
 /**
  * The serving handle (ADR-035): DATABASE_URL through PgBouncer; in development without it, an embedded PGlite database
- * in data/pglite. Migrations run first, as the owner (DATABASE_DIRECT_URL), or on the embedded handle.
+ * in data/pglite (DEALS_PGLITE_DIR overrides the directory — how a test gives a spawned server its own).
+ * Migrations run first, as the owner (DATABASE_DIRECT_URL), or on the embedded handle.
  */
 async function openDb(config, { log = console, registry } = {}) {
     if (!config.db.url) {
         if (config.isProduction) throw new Error('DATABASE_URL is not set: production serves from PostgreSQL (OpenVibe.Host roles/data add-service.sh deals)');
-        log.warn(`[Deals] DATABASE_URL unset: embedded PGlite database in ${DEV_PGLITE} (development only, one process)`);
-        fs.mkdirSync(DEV_PGLITE, { recursive: true });
-        const db = createDb({ pglite: DEV_PGLITE, service: 'deals', registry, log });
+        const dir = config.db.pgliteDir || DEV_PGLITE;
+        log.warn(`[Deals] DATABASE_URL unset: embedded PGlite database in ${dir} (development only, one process)`);
+        fs.mkdirSync(dir, { recursive: true });
+        const db = createDb({ pglite: dir, service: 'deals', registry, log });
         await db.migrate({ dir: MIGRATIONS, log });
         return db;
     }
