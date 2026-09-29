@@ -20,6 +20,16 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.match(r.headers.get('cache-control'), /public, max-age=60/);
     });
 
+    await check('every page carries the boost marker and script, and the navbar signs in back to the current page', async () => {
+        for (const p of ['/', '/new', '/search?q=drone', '/updates', '/submit']) {
+            const r = await t.get(p);
+            assert.strictEqual(r.status, 200, p);
+            assert.match(r.text, /<meta name="ov-boost" content="deals@[^"]*">/, `${p} carries the release marker`);
+            assert.match(r.text, /<script src="\/shared\/boost\.js\?v=[0-9a-f]+" data-main="#main" defer><\/script>/, `${p} starts boost on <main>`);
+            assert.ok(r.text.includes('"loginUrl":"/auth/login?next={path}"'), `${p}: the navbar login returns to the current page`);
+        }
+    });
+
     await check('/submit: sign-in first; then a plain form with a form token; a forged token is refused', async () => {
         const anon = await t.get('/submit');
         assert.match(anon.text, /Sign in with your OpenVibe account/);
