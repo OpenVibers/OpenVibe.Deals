@@ -17,10 +17,11 @@
  * on that token alone: a bad one is refused (problem+json), never downgraded to anonymous.
  */
 const contracts = require('openvibe-contracts');
-const { extractToken, claimsToUser, decodeJwtPayload } = require('./sso');
+const { claimsToUser, decodeJwtPayload } = require('openvibe-sdk/sso');
+const { verifyServiceToken } = require('openvibe-sdk/auth');
 const { checkCapability } = require('./capabilities');
 
-const { ids, serviceAuth, http, staff: staffMap } = contracts;
+const { ids, http, staff: staffMap } = contracts;
 const PRINCIPAL_SUB = /^(svc|app|mod):/;
 const AUDIENCE = 'openvibe.deals';
 
@@ -34,10 +35,11 @@ function createViewerResolver({ auth, config, people }) {
     const moderators = new Set(config.moderators || []);
 
     async function fromServiceToken(req, token) {
-        const publicKey = await auth.ensureKey();
-        if (!publicKey) throw new ViewerError(503, 'identity.unavailable', 'the Network signing key is not loaded yet');
-        const r = serviceAuth.verifyServiceToken(token, { publicKey, issuer: config.networkUrl, audience: AUDIENCE });
-        if (!r.ok) throw new ViewerError(401, r.code, r.reason);
+        const r = await verifyServiceToken(token, {
+            jwks: `${config.networkInternalUrl}/api/.well-known/jwks`,
+            issuer: config.networkUrl, audience: AUDIENCE, contracts,
+        });
+        if (!r.ok) throw new ViewerError(r.code === 'token.unavailable' ? 503 : 401, r.code === 'token.unavailable' ? 'identity.unavailable' : r.code, r.reason);
         // Developer apps (app:…) and modules (mod:…) are third parties: they act only for the person
         // who authorized them (on_behalf_of), never for whoever X-OV-Subject names. Only first-party
         // service principals (svc:…) are trusted to name the acting person.
@@ -83,7 +85,7 @@ function createViewerResolver({ auth, config, people }) {
                 return await fromServiceToken(req, token);
             }
         }
-        const token = extractToken(req);
+        const token = auth.extractToken(req);
         if (!token) return ANONYMOUS;
         return (await fromUserToken(token)) || ANONYMOUS;
     }

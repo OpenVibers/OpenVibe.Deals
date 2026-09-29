@@ -17,12 +17,12 @@ const contracts = require('openvibe-contracts');
 
 const configLib = require('./config');
 const { openStore } = require('./db');
-const { createAuthClient, createAuthRoutes } = require('./auth/sso');
+const { createSsoClient } = require('openvibe-sdk/sso');
 const { createViewerResolver } = require('./auth/viewer');
 const { createPeople } = require('./clients/network');
 const { createCommunity } = require('./clients/community');
 const { createSources } = require('./clients/sources');
-const { createDealsOutbox } = require('./events/outbox');
+const { createServiceOutbox } = require('openvibe-sdk/events');
 const { createReads } = require('./domain/reads');
 const { createCatalog } = require('./domain/catalog');
 const { createPublication } = require('./domain/publication');
@@ -56,7 +56,12 @@ async function createApp(opts = {}) {
     // PostgreSQL (ADR-035): opened and migrated here unless the caller (a test, a script) hands in a store.
     const store = opts.store || await openStore(config, { now: opts.now, log });
 
-    const outbox = createDealsOutbox({ db: store.db, config, fetchImpl, now: store.now, log });
+    const outbox = createServiceOutbox({
+        db: store.db, source: 'deals',
+        eventsUrl: config.events.url, networkInternalUrl: config.networkInternalUrl,
+        clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
+        intervalMs: config.events.intervalMs, now: store.now, fetch: fetchImpl, log,
+    });
     const people = createPeople({ store, config, fetchImpl });
     const community = createCommunity({ store, config, fetchImpl });
     const sources = createSources({ config, fetchImpl });
@@ -73,7 +78,15 @@ async function createApp(opts = {}) {
     const votes = createVotes({ config, store, reads, hotness, limits, flags, people, outbox });
     const listings = createListings({ store });
     const importer = createImporter({ config, store, reads, catalog, offers, indexing, sources, log });
-    const auth = opts.auth || createAuthClient(config);
+    const sso = opts.sso || createSsoClient({
+        site: 'deals', baseUrl: config.baseUrl,
+        clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
+        redirectUri: config.oauth.redirectUri, scope: config.oauth.scope,
+        networkUrl: config.networkUrl, networkInternalUrl: config.networkInternalUrl,
+        issuer: config.issuer || config.networkUrl, secureCookies: config.cookies.secure, log,
+    });
+    const auth = opts.auth || sso;
+    const jwksUrl = `${config.networkInternalUrl}/api/.well-known/jwks`;
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, store, offers, hotness, indexing, listings, importer, limits, log });
 
@@ -122,12 +135,12 @@ async function createApp(opts = {}) {
     app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'openvibe-deals', version: VERSION }));
     // GET /release.json (ADR-016) and POST /release-metrics: open tabs' update reports into /metrics.
     release.mount(app, { registry: metrics.registry });
-    const readiness = createDealsReadiness({ store, auth, outbox, importer, worker, limits, release: release.release, valkey: ctx.valkey });
+    const readiness = createDealsReadiness({ store, jwksUrl, outbox, importer, worker, limits, release: release.release, valkey: ctx.valkey, log });
     app.get('/api/ready', readiness.handler);
 
     // ── Sign-in (OAuth2 client of OpenVibe.Network) ─────────
     app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));
-    app.use('/auth', createAuthRoutes(config, auth));
+    app.use('/auth', sso.router(express));
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'deals', service: 'deals', host: 'openvibe.deals', name: 'OpenVibe.Deals', profile: 'ugc' })); }
 
     // ── Static assets (content-hashed ?v= → immutable) ──────

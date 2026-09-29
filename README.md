@@ -249,9 +249,9 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
 - **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
 - **Packages** (pinned release tarballs): `openvibe-publishing` v1.0.0 (seo gate, JSON-LD, feeds,
-  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.76.0, `openvibe-shared` v1.27.0
-  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.20.0 (outbox, inbox,
-  webhook signatures v2, service tokens, per-actor limits).
+  sitemaps, index-hooks, discussion, ssr), `openvibe-contracts` v0.79.0, `openvibe-shared` v2.0.0
+  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.25.0 (sso, outbox,
+  inbox, webhook signatures v2, service tokens, per-actor limits).
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
 - **OpenVibe.Sources:** `sources.item.read`; a `deals`-category source must be registered and enabled
