@@ -2,7 +2,7 @@
 
 /**
  * Offer writes: submission, edits, observations, expiry, moderation (disable / enable / review) and
- * duplicate resolution (merge / unmerge). Every write is one SQLite transaction that also writes its
+ * duplicate resolution (merge / unmerge). Every write is one PostgreSQL transaction that also writes its
  * events (outbox), its Search documents and, for observations, its watch notifications.
  *
  * Prices are never edited in place. A price, shipping cost, condition or availability is an

@@ -23,9 +23,6 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-# Deals' own database lives in /var/lib/openvibe-deals; the code tree stays read-only.
-StateDirectory=openvibe-deals
-Environment=DEALS_DB_PATH=/var/lib/openvibe-deals/deals.db
 
 [Install]
 WantedBy=multi-user.target

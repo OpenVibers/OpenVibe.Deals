@@ -44,5 +44,5 @@
   "namespacesOwned": [
     "deals.*"
   ],
-  "notes": "Port 4840. Owns deal_products, deal_product_aliases, deal_offers, deal_offer_sources, deal_votes, deal_hotness_snapshots, deal_watches, deal_price_observations, deal_flags (+ deal_stores) in its own SQLite. Consumes OpenVibe.Network (SSO, identity.subject.resolve), OpenVibe.Sources (sources.item.read; sources.item.* events only wake the pull), OpenVibe.Community (community.comment.write, community.comment.moderate) and publishes through OpenVibe.Events (events.event.publish); OpenVibe.Search reads deals.index_document.* from Events; deals.watch.matched is for Network notifications (consumer not built yet)."
+  "notes": "Port 4840. Owns deal_products, deal_product_aliases, deal_offers, deal_offer_sources, deal_votes, deal_hotness_snapshots, deal_watches, deal_price_observations, deal_flags (+ deal_stores) in its own PostgreSQL database. Consumes OpenVibe.Network (SSO, identity.subject.resolve), OpenVibe.Sources (sources.item.read; sources.item.* events only wake the pull), OpenVibe.Community (community.comment.write, community.comment.moderate) and publishes through OpenVibe.Events (events.event.publish); OpenVibe.Search reads deals.index_document.* from Events; deals.watch.matched is for Network notifications (consumer not built yet)."
 }

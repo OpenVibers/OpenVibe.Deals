@@ -5,7 +5,7 @@
  *
  * The per-address limits in app.js (/api/v1 240 a minute, form posts 60, sign-in) and the per-person
  * abuse controls (domain/limits.js: votes an hour, submissions and flags a day, observations an hour,
- * kept in SQLite) stay and keep deciding what is recorded. These cap requests, refused ones included,
+ * kept in PostgreSQL) stay and keep deciding what is recorded. These cap requests, refused ones included,
  * by who makes them, once req.viewer is resolved (auth/viewer.js):
  *
  *   a person                        user:usr_… (their own token or cookie, named by a service in

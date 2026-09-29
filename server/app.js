@@ -48,7 +48,7 @@ const { assetVersion } = require('./render/layout');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VERSION = require('../package.json').version;
 
-/** opts: config, dbPath, now (clock), fetchImpl, auth, log, limitsNow (the per-actor limiter's clock, tests) */
+/** opts: config, now (clock), fetchImpl, auth, log, limitsNow (the per-actor limiter's clock, tests) */
 async function createApp(opts = {}) {
     const config = opts.config || configLib.load();
     const log = opts.log || console;

@@ -374,9 +374,7 @@ Production deploys with `sudo ovhost deploy deals` on the host (strategy `git-ch
 fast-forward `/opt/openvibe.deals`, install on a lockfile change, restart, wait for `/api/ready`).
 The unit is `openvibe-deals.service` on `127.0.0.1:4840`, the env file `/etc/openvibe/deals.env`. The database is
 `ov_deals` on the host's data role (`sudo /opt/openvibe.host/roles/data/add-service.sh deals` writes its settings); the
-release migrates it at boot. The one-time move from SQLite is `scripts/migrate-to-postgres.js` (openvibe-sdk
-`runSqliteMigration`, with a `--pglite` rehearsal mode), run while the service is stopped; the old
-`/var/lib/openvibe-deals/deals.db` stays read-only for 7 days as the rollback.
+release migrates it at boot.
 Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
 restart; afterwards `sudo ovhost rollback deals --to <sha>`. Migrations only add tables and columns.
 
@@ -393,7 +391,7 @@ First install (done once; kept for a rebuild):
    `deals.env`), and add the grants listed above.
 3. **Sources:** register and enable a `deals`-category source once a person has checked its terms.
 4. **Search:** nothing to do unless `SEARCH_EVENT_OWNERS` is overridden there (the default includes `deals`).
-5. **systemd:** install `deploy/systemd/openvibe-deals.service` (port 4840, `StateDirectory=openvibe-deals`).
+5. **systemd:** install `deploy/systemd/openvibe-deals.service` (port 4840).
 6. **nginx:** install `deploy/nginx/openvibe.deals.conf`. `/metrics` and `/internal/` are never proxied.
 7. **Events subscription:** `node scripts/subscribe.js` (optional — the importer polls anyway).
 8. **Contracts:** done: the capabilities and manifest are released in openvibe-contracts v0.23.0,

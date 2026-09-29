@@ -8,9 +8,6 @@
  *   t.events('deals.watch.matched')          // envelopes in event_outbox
  *   t.submit(user, { url, title, price, … }) // a deal through the no-JS form, → offer row
  */
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const http = require('http');
 const { startNetwork, startCommunity, startSources } = require('./mocks');
 
@@ -25,13 +22,10 @@ async function boot(opts = {}) {
     const network = await startNetwork();
     const community = await startCommunity({ network });
     const sources = await startSources({ network });
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ov-deals-test-'));
-    const dbPath = path.join(dir, 'deals.db');
     const clock = opts.clock || makeClock();
     const mod = network.addUser('moddy', { display_name: 'Mod', role: 'global_mod' });
     const env = {
         NODE_ENV: 'test', PORT: '0', BASE_URL: 'https://openvibe.deals', TRUST_PROXY: '1',
-        DEALS_DB_PATH: dbPath,
         OV_NETWORK_URL: network.url, OV_NETWORK_INTERNAL_URL: network.url,
         OV_OAUTH_CLIENT_ID: 'deals', OV_OAUTH_CLIENT_SECRET: 'shh', COOKIE_SECURE: 'false',
         OV_COMMUNITY_URL: 'https://openvibe.community', OV_COMMUNITY_INTERNAL_URL: community.url,
@@ -45,7 +39,7 @@ async function boot(opts = {}) {
     const quiet = { log() {}, warn() {}, error: (...a) => { if (process.env.VERBOSE) console.error(...a); } };
 
     const { createStore } = require('../../server/db');
-    // One database per boot (PGlite, or DEALS_TEST_STORE=pg: the containers); a restart keeps it, like a file did.
+    // One database per boot (PGlite, or DEALS_TEST_STORE=pg: the containers); a restart keeps it.
     const testdb = await require('./db').testDb();
     let server = null;
     let built = null;
@@ -100,10 +94,10 @@ async function boot(opts = {}) {
     function offerJson(slug) { return get(`/d/${slug}.json`).then((r) => r.json().offer); }
 
     const t = {
-        network, community, sources, clock, dbPath, mod, get, events, submit, offerJson, HOUR,
+        network, community, sources, clock, mod, get, events, submit, offerJson, HOUR,
         csrf: (user) => require('../../server/auth/forms').csrfToken({ formSecret: env.DEALS_FORM_SECRET }, user),
         async restart() { await stop(); await start(); },
-        async close() { await stop(); await testdb.close(); await network.close(); await community.close(); await sources.close(); fs.rmSync(dir, { recursive: true, force: true }); },
+        async close() { await stop(); await testdb.close(); await network.close(); await community.close(); await sources.close(); },
     };
     await start();
     return t;

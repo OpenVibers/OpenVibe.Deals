@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Server-side sliding-window limits kept in SQLite (rate_events), so they hold across restarts and
+ * Server-side sliding-window limits kept in PostgreSQL (rate_events), so they hold across restarts and
  * across every route that performs the same action (page forms and the API share them).
  *
  *   limits.check(kind, key, max, windowMs)   → throws 429 with retry_after when the window is full
