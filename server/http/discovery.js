@@ -17,11 +17,12 @@
 const express = require('express');
 const seo = require('openvibe-publishing/seo');
 const sharedSeo = require('openvibe-shared/seo');
+const cache = require('openvibe-shared/cache-policy');
 
 function createDiscoveryRoutes({ config, store, publication, listings }) {
     const router = express.Router();
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
-    const xml = (res, body) => res.type('application/xml').set('Cache-Control', 'public, max-age=300').send(body);
+    const xml = (res, body) => res.type('application/xml').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(body);
 
     async function offerEntries() {
         return Promise.all((await listings.indexable()).map(async (o) => {
@@ -45,11 +46,11 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
             '# indexability (meta robots / X-Robots-Tag): stale or expired deals are noindex. A Disallow is not a noindex.',
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/submit', '/watches', '/mod', '/search', '/auth/', '/api/', '/internal/'] }),
         ].join('\n');
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(body);
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(body);
     });
 
     router.get('/llms.txt', (_req, res) => {
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(sharedSeo.llmsTxt({
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsTxt({
             name: 'OpenVibe.Deals',
             summary: 'Deals submitted and voted on by the OpenVibe community or imported from registered sources, with the source and observation time of every price.',
             details: 'A price on this site is an observation: it has a source and an observed_at time, and it is only claimed "as of" that time. Offers whose latest observation is older than the freshness window are marked stale and are noindex; expired offers are noindex; a price nobody stated is shown as "not stated" and omitted from structured data (never 0). Every deal page has a JSON twin at <deal URL>.json with the full observation history, sources, votes and indexability reasons. Imported and AI-assisted text is noindex until a person reviews it.',

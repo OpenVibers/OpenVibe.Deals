@@ -6,6 +6,7 @@
  */
 const express = require('express');
 const contracts = require('openvibe-contracts');
+const cache = require('openvibe-shared/cache-policy');
 const { ApiError } = require('../domain/values');
 
 /** Wrap a JSON handler: its return value is the body; errors become problems. */
@@ -35,7 +36,7 @@ function jsonBody(req, res, next) {
 
 /** Private, per-viewer responses: never stored by a shared cache, never indexed. */
 function privateNoStore(res) {
-    res.set('Cache-Control', 'private, no-store');
+    res.set('Cache-Control', cache.htmlHeaders({ private: true }));
     res.vary('Cookie');
     res.vary('Authorization');
 }
