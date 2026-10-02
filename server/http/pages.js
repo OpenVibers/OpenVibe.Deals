@@ -24,6 +24,7 @@ const express = require('express');
 const ovServe = require('openvibe-shared/serve');
 const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
+const cache = require('openvibe-shared/cache-policy');
 const ssr = require('openvibe-publishing/ssr');
 const { renderPage } = require('../render/layout');
 const views = require('../render/views');
@@ -48,8 +49,8 @@ function createPages(ctx) {
     function cacheHeaders(req, res, { cacheable, robots, status }) {
         res.vary('Cookie');
         res.vary('Authorization');
-        if (cacheable && req.viewer.kind === 'anonymous' && status === 200) res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=60');
-        else res.set('Cache-Control', 'private, no-store');
+        if (cacheable && req.viewer.kind === 'anonymous' && status === 200) res.set('Cache-Control', cache.htmlHeaders({ maxAge: 60 }));
+        else res.set('Cache-Control', cache.htmlHeaders({ private: true }));
         if (robots && robots !== 'index, follow') res.set('X-Robots-Tag', robots);
     }
 
@@ -197,7 +198,7 @@ function createPages(ctx) {
         if (!offer) { notFound(req, res); return null; }
         if (offer.merged_into) {
             const root = await reads.root(offer);
-            res.set('Cache-Control', 'public, max-age=300');
+            res.set('Cache-Control', cache.htmlHeaders({ maxAge: 300 }));
             res.redirect(301, `${publication.offerPath(root)}${json ? '.json' : ''}`);
             return null;
         }
@@ -423,12 +424,12 @@ function createPages(ctx) {
     }
     const channel = () => ({ title: 'OpenVibe.Deals — new deals', link: publication.abs('/new'), description: 'New deals, each with its source and the time its price was observed.', language: 'en' });
 
-    router.get('/feed.xml', async (_req, res) => res.type('application/rss+xml').set('Cache-Control', 'public, max-age=300').send(seo.rssFeed({ ...channel(), feedUrl: publication.abs('/feed.xml') }, await feedItems())));
+    router.get('/feed.xml', async (_req, res) => res.type('application/rss+xml').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(seo.rssFeed({ ...channel(), feedUrl: publication.abs('/feed.xml') }, await feedItems())));
     router.get('/atom.xml', async (_req, res) => {
         const items = await feedItems();
-        res.type('application/atom+xml').set('Cache-Control', 'public, max-age=300').send(seo.atomFeed({ ...channel(), feedUrl: publication.abs('/atom.xml'), ...(items.length ? {} : { updated: store.now() }) }, items));
+        res.type('application/atom+xml').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(seo.atomFeed({ ...channel(), feedUrl: publication.abs('/atom.xml'), ...(items.length ? {} : { updated: store.now() }) }, items));
     });
-    router.get('/feed.json', async (_req, res) => res.type('application/feed+json').set('Cache-Control', 'public, max-age=300').send(JSON.stringify(seo.jsonFeed({ ...channel(), feedUrl: publication.abs('/feed.json') }, await feedItems()))));
+    router.get('/feed.json', async (_req, res) => res.type('application/feed+json').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(JSON.stringify(seo.jsonFeed({ ...channel(), feedUrl: publication.abs('/feed.json') }, await feedItems()))));
 
     return { router, notFound, messagePage };
 }
