@@ -2,37 +2,32 @@
 
 /**
  * Errors as RFC 9457 problems (contracts errors.problem@1, which keeps the legacy { error } field),
- * and the small request helpers every router shares.
+ * and the small request helpers every router shares. Built from openvibe-sdk/service (docs/service.md,
+ * the Deals row) so every service answers the same way; the exports stay put so no call site moves.
+ * ApiError stays Deals' own refusal (server/domain/values.js): the kit answers any error carrying an
+ * HTTP status and a string code with its own status and code, and anything else as a generic 500.
  */
-const express = require('express');
-const contracts = require('openvibe-contracts');
+const svc = require('openvibe-sdk/service');
 const cache = require('openvibe-shared/cache-policy');
 const { ApiError } = require('../domain/values');
 
-/** Wrap a JSON handler: its return value is the body; errors become problems. */
-function run(fn, status = 200) {
-    return async (req, res) => {
-        try {
-            const out = await fn(req, res);
-            if (out === undefined || res.headersSent) return;
-            res.status(typeof status === 'function' ? status(out) : status).json(out);
-        } catch (err) {
-            if (res.headersSent) return;
-            if (err instanceof ApiError) {
-                if (err.extra && err.extra.retry_after) res.set('Retry-After', String(err.extra.retry_after));
-                return contracts.http.sendProblem(res, err.status, err.code, { detail: err.message, ctx: req.ov, extra: err.extra || undefined });
-            }
-            console.error('[Deals API]', err && err.stack ? err.stack : err);
-            contracts.http.sendProblem(res, 500, 'internal.error', { detail: 'Internal error', ctx: req.ov });
-        }
-    };
-}
+const o = { name: 'Deals API', ServiceError: ApiError };
 
-const jsonParser = express.json({ limit: '64kb' });
-/** JSON body parser whose syntax errors are problems too. */
-function jsonBody(req, res, next) {
-    jsonParser(req, res, (err) => (err ? contracts.http.sendProblem(res, 400, 'request.invalid_json', { detail: 'Malformed JSON body', ctx: req.ov }) : next()));
-}
+/**
+ * Wrap a JSON handler: its return value is the body; errors become problems. The kit's sendError does
+ * not set Retry-After, so an ApiError refusal carrying err.extra.retry_after sets that header here.
+ */
+const run = (fn, status) => svc.run(async (req, res) => {
+    try {
+        return await fn(req, res);
+    } catch (err) {
+        if (err instanceof ApiError && err.extra && err.extra.retry_after) res.set('Retry-After', String(err.extra.retry_after));
+        throw err;
+    }
+}, status, o);
+
+/** JSON body parser whose failures are problems too: malformed 400, over 64 kB 413, unreadable encoding 415. */
+const jsonBody = svc.jsonBody({ limit: '64kb' });
 
 /** Private, per-viewer responses: never stored by a shared cache, never indexed. */
 function privateNoStore(res) {
