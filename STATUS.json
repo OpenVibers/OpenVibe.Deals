@@ -9,9 +9,9 @@
   "domain": "openvibe.deals",
   "contracts": "openvibe-contracts v0.79.0",
   "packages": [
-    "openvibe-publishing v1.1.0",
+    "openvibe-publishing v1.2.0",
     "openvibe-contracts v0.79.0",
-    "openvibe-shared v2.2.0",
+    "openvibe-shared v2.6.0",
     "openvibe-sdk v0.25.1"
   ],
   "capabilities": [
