@@ -17,6 +17,8 @@ const frame = require('openvibe-shared/frame');
 
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.Deals';
+// One site summary, shared by /llms.txt, /llms-full.txt and the home page's ai-summary.
+const SITE_SUMMARY = 'Deals submitted and voted on by the OpenVibe community or imported from registered sources, with the source and observation time of every price.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const NAV_LINKS = [
     { label: 'Hot', href: '/' },
@@ -42,7 +44,8 @@ function setRelease(id) { if (id) RELEASE = String(id); }
 
 /**
  * o: title, description, decision (required), canonical, type ('website'|'article'), image,
- *    jsonLd [], feeds [{ type, href, title }], body (HTML), viewer, config, prev, next, bodyClass
+ *    jsonLd [], feeds [{ type, href, title }], body (HTML), viewer, config, prev, next, bodyClass,
+ *    summary (one-line AI summary → ai-summary meta + WebPage JSON-LD), facts, updated, url
  */
 function renderPage(o) {
     if (!o.decision) throw new TypeError('renderPage needs the gate decision');
@@ -75,6 +78,10 @@ function renderPage(o) {
         description: o.description || 'Deals submitted and voted on by the community, with source, price and freshness always shown.',
         canonical: o.canonical,
         decision: o.decision,
+        summary: o.summary,
+        facts: o.facts,
+        updated: o.updated,
+        url: o.url,
         type: o.type || 'website',
         image: o.image,
         jsonLd: o.jsonLd,
@@ -94,4 +101,4 @@ function renderPage(o) {
     });
 }
 
-module.exports = { renderPage, asset, assetVersion, setRelease, SITE_NAME, NETWORK_URL };
+module.exports = { renderPage, asset, assetVersion, setRelease, SITE_NAME, SITE_SUMMARY, NETWORK_URL };

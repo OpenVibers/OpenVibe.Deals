@@ -186,6 +186,29 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.ok(!offers.text.includes(deal.slug), 'expired');
     });
 
+    await check('llms-full.txt lists only indexable deals as short summaries, within maxBytes', async () => {
+        const full = await t.get('/llms-full.txt');
+        assert.strictEqual(full.status, 200);
+        assert.match(full.headers.get('content-type'), /text\/plain/);
+        assert.ok(Buffer.byteLength(full.text) <= 512 * 1024, 'stays within maxBytes (512 KiB)');
+        assert.match(full.headers.get('cache-control'), /max-age=3600/);
+        assert.match(full.text, /^# OpenVibe\.Deals/);
+        const urls = [...full.text.matchAll(/^URL: (\S+)$/gm)].map((m) => m[1]);
+        assert.ok(urls.length >= 1, 'lists an indexable deal');
+        // The same gate as the sitemap: every listed URL is one the sitemap also lists as indexable.
+        const locs = new Set([...(await t.get('/sitemaps/offers.xml')).text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
+        for (const u of urls) assert.ok(locs.has(u), `only indexable deals: ${u}`);
+        assert.ok(!urls.some((u) => u.endsWith(`/d/${timed.slug}`)), 'an expired deal stays out');
+        assert.ok(!urls.some((u) => u.endsWith(`/d/${deal.slug}`)), 'an expired deal stays out');
+    });
+
+    await check('/ carries the AI summary head (ai-summary meta and WebPage JSON-LD)', async () => {
+        const home = await t.get('/');
+        assert.match(home.text, /<meta name="ai-summary" content="[^"]+">/);
+        const ld = jsonLd(home.text);
+        assert.ok(ld.some((x) => x['@type'] === 'WebPage' && x.description && x.url === 'https://openvibe.deals/'), 'WebPage JSON-LD names the home URL and summary');
+    });
+
     await check('operations: health, readiness, release.json, metrics (loopback), legal pages', async () => {
         assert.strictEqual((await t.get('/api/health')).json().service, 'openvibe-deals');
         const ready = await t.get('/api/ready');

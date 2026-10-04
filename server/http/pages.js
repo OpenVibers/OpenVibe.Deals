@@ -26,7 +26,7 @@ const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
 const cache = require('openvibe-shared/cache-policy');
 const ssr = require('openvibe-publishing/ssr');
-const { renderPage } = require('../render/layout');
+const { renderPage, SITE_SUMMARY } = require('../render/layout');
 const views = require('../render/views');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const { ApiError, iso } = require('../domain/values');
@@ -118,6 +118,8 @@ function createPages(ctx) {
         send(req, res, 200, {
             title: kind === 'hot' ? 'Hot deals' : 'New deals',
             description: 'Deals submitted and voted on by the community, each with its source and the time its price was observed.',
+            // The home page carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
+            ...(kind === 'hot' && pager.page === 1 ? { summary: SITE_SUMMARY } : {}),
             decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
             canonical,
             feeds: [{ type: 'rss', href: '/feed.xml', title: 'New deals (RSS)' }, { type: 'atom', href: '/atom.xml', title: 'New deals (Atom)' }, { type: 'json', href: '/feed.json', title: 'New deals (JSON Feed)' }],
