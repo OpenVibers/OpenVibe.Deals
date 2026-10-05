@@ -1,14 +1,10 @@
 'use strict';
 
 /**
- * Capability checks for service tokens (audience openvibe.deals), including the ids Deals
- * introduces before the contracts library knows them.
- *
- * openvibe-contracts' capabilities.check() answers capability.unknown for an id that is not in its
- * manifests yet. Deals' ids are proposed in docs/capabilities-proposal/ for the next contracts
- * release; until then a grant is decided locally with the library's own matching rule (the exact
- * id, or a `prefix.*` grant covering it). An id the library does know always goes through the
- * library, so the day the release lands nothing changes here.
+ * Capability checks for service tokens (audience openvibe.deals). The deals.* ids this service
+ * introduces are defined by the installed openvibe-contracts, so a grant is decided by the library's
+ * own matching rule (the exact id, or a `prefix.*` grant covering it). CAPABILITIES keeps the ids in
+ * one place for the guards, the proposal documents and the tests.
  *
  * Browsers (Network user JWTs) are never judged by capabilities: they are judged by the domain
  * (signed in, submitter, moderator). A service token is judged by its capability AND, for actions a
@@ -30,16 +26,10 @@ const CAPABILITIES = Object.freeze({
     PRODUCT_RESOLVE: 'deals.product.resolve',
     FLAG_CREATE: 'deals.flag.create',
 });
-const PROPOSED = new Set(Object.values(CAPABILITIES));
 
 /** → { allowed, code, reason } like capabilities.check(). */
 function checkCapability(claims, capabilityId) {
-    if (!capabilities.get(capabilityId) && PROPOSED.has(capabilityId)) {
-        return capabilities.grants(claims && claims.cap, capabilityId)
-            ? { allowed: true, code: null, reason: null }
-            : { allowed: false, code: 'capability.denied', reason: `${capabilityId} not granted` };
-    }
     return capabilities.check(claims, capabilityId);
 }
 
-module.exports = { CAPABILITIES, PROPOSED, checkCapability };
+module.exports = { CAPABILITIES, checkCapability };
