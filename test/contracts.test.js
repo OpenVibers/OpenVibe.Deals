@@ -1,14 +1,17 @@
 'use strict';
 /**
- * The proposals the lead releases in the next openvibe-contracts version are valid against the
- * released schemas, match what the code enforces and emits, and do not collide with released ids.
+ * The capability and service-manifest proposals — now released in openvibe-contracts — stay valid
+ * against the installed schemas, match what the code enforces and emits, and do not collide with
+ * released ids.
  */
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const contracts = require('openvibe-contracts');
 const { check, done } = require('./helpers/boot');
-const { PROPOSED } = require('../server/auth/capabilities');
+const { CAPABILITIES } = require('../server/auth/capabilities');
+
+const CAPS = new Set(Object.values(CAPABILITIES));
 
 const DIR = path.join(__dirname, '..', 'docs', 'capabilities-proposal');
 const SRC = path.join(__dirname, '..', 'server');
@@ -35,14 +38,14 @@ function sources(dir) {
     });
 
     await check('the charter capabilities are all there', async () => {
-        for (const id of ['deals.offer.submit', 'deals.offer.update', 'deals.offer.expire', 'deals.vote.set', 'deals.vote.remove', 'deals.watch.create', 'deals.watch.delete', 'deals.product.resolve']) assert.ok(PROPOSED.has(id), id);
+        for (const id of ['deals.offer.submit', 'deals.offer.update', 'deals.offer.expire', 'deals.vote.set', 'deals.vote.remove', 'deals.watch.create', 'deals.watch.delete', 'deals.product.resolve']) assert.ok(CAPS.has(id), id);
     });
 
     await check('the proposals are exactly the capabilities the code enforces', async () => {
-        assert.deepStrictEqual(caps.map((c) => c.id).sort(), [...PROPOSED].sort());
-        assert.deepStrictEqual([...manifest.capabilities].sort(), [...PROPOSED].sort());
+        assert.deepStrictEqual(caps.map((c) => c.id).sort(), [...CAPS].sort());
+        assert.deepStrictEqual([...manifest.capabilities].sort(), [...CAPS].sort());
         const guarded = new Set([...code.matchAll(/guard\('([a-z.]+)'\)/g)].map((m) => m[1]));
-        assert.deepStrictEqual([...guarded].sort(), [...PROPOSED].sort());
+        assert.deepStrictEqual([...guarded].sort(), [...CAPS].sort());
     });
 
     await check('the service manifest proposal is a valid registry.service-manifest@1', async () => {
