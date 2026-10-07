@@ -1,4 +1,5 @@
 'use strict';
+const showcase = require('openvibe-shared/showcase');
 
 /**
  * Public, server-rendered routes — useful without JavaScript (every action is a plain form):
@@ -119,7 +120,7 @@ function createPages(ctx) {
             title: kind === 'hot' ? 'Hot deals' : 'New deals',
             description: 'Deals submitted and voted on by the community, each with its source and the time its price was observed.',
             // The home page carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
-            ...(kind === 'hot' && pager.page === 1 ? { summary: SITE_SUMMARY } : {}),
+            ...(kind === 'hot' && pager.page === 1 ? { summary: SITE_SUMMARY, styles: [showcase.STYLESHEET] } : {}),
             decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
             canonical,
             feeds: [{ type: 'rss', href: '/feed.xml', title: 'New deals (RSS)' }, { type: 'atom', href: '/atom.xml', title: 'New deals (Atom)' }, { type: 'json', href: '/feed.json', title: 'New deals (JSON Feed)' }],
@@ -130,6 +131,7 @@ function createPages(ctx) {
                 heading: kind === 'hot' ? 'Hot deals' : 'New deals',
                 intro: kind === 'hot' ? 'Ranked by community votes over time (hotness formula hot@1). Every price shows when it was observed.' : 'The newest deals first. Every price shows when it was observed.',
                 views: list, pager, urls, tabs: views.tabs(kind),
+                lead: kind === 'hot' && pager.page === 1 ? views.dealsShowcase() : '',
                 empty: 'No deals have been posted yet. Submit the first one.',
             }),
         }, { cacheable: true });

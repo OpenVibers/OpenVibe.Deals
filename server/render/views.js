@@ -9,6 +9,7 @@
  */
 const { html, raw, renderMarkdown, paginationHtml, breadcrumbsHtml } = require('openvibe-publishing/ssr');
 const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/values');
+const showcase = require('openvibe-shared/showcase');
 
 const pad = (n) => String(n).padStart(2, '0');
 function when(ms) {
@@ -74,9 +75,28 @@ ${latestLine(v)}
 </div></li>`;
 }
 
-function offerList({ heading, intro, views, pager, urls, tabs, empty }) {
-    return html`${tabs ? raw(tabs) : ''}
-<h1>${heading}</h1>
+/** The front page opens with what OpenVibe.Deals is for (openvibe-shared/showcase); the hot list follows it. */
+function dealsShowcase() {
+    return showcase.hero({
+        eyebrow: 'OpenVibe.Deals',
+        title: 'Deals where every price', accent: 'says when',
+        lede: 'People post deals and vote them up or down. Every price is an observation with its source and the time it was seen: an old one says it may no longer be available, and a price nobody stated stays "not stated".',
+        actions: [{ label: 'Browse hot deals', href: '#deals', primary: true }, { label: 'Submit a deal', href: '/submit' }],
+    }) + showcase.features({
+        title: 'How it works',
+        items: [
+            { icon: 'ov:history', title: 'Prices as of a time', text: 'Each deal keeps every price it was seen at, newest first, each with its source. Nothing is called current without a fresh one.' },
+            { icon: 'ov:check', title: 'Votes decide what is hot', text: 'One vote per person, counted on the server. A deal page shows its hotness with the formula and the inputs.' },
+            { icon: 'ov:search', title: 'Compare across stores', text: 'A product page lists every offer for it, each with its own latest price and the time it was seen.' },
+            { icon: 'ov:bell', title: 'Watches and saved searches', text: 'Watch words, a product or a price limit for new prices that match, or save a search to run again.' },
+        ],
+    });
+}
+
+function offerList({ heading, intro, views, pager, urls, tabs, empty, lead }) {
+    // Under the showcase the list's heading is an h2 above the sort tabs, so #deals lands on both.
+    return html`${lead ? html`${raw(lead)}<h2 id="deals">${heading}</h2>` : ''}${tabs ? raw(tabs) : ''}
+${lead ? '' : html`<h1>${heading}</h1>`}
 ${intro ? html`<p class="lede">${intro}</p>` : ''}
 ${views.length ? html`<ol class="deal-list">${views.map((v) => offerCard(v, urls))}</ol>` : html`<p class="empty">${empty || 'Nothing here yet.'}</p>`}
 ${raw(pager ? paginationHtml(pager) : '')}`;
@@ -282,4 +302,4 @@ function message({ heading, text, action }) {
     return html`<h1>${heading}</h1><p>${text}</p>${action ? html`<p><a href="${action.href}">${action.label}</a></p>` : ''}`;
 }
 
-module.exports = { offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, message, priceText, when };
+module.exports = { dealsShowcase, offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, message, priceText, when };
