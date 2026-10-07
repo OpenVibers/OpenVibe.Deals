@@ -11,7 +11,7 @@
   "packages": [
     "openvibe-publishing v1.3.0",
     "openvibe-contracts v0.97.0",
-    "openvibe-shared v2.6.0",
+    "openvibe-shared v2.10.1",
     "openvibe-sdk v0.26.0"
   ],
   "capabilities": [
@@ -36,7 +36,7 @@
   "deployed": true,
   "deployment": "Deployed with `sudo ovhost deploy deals`: unit openvibe-deals, 127.0.0.1:4840 loopback only; Network OAuth client deals and its grants exist; on 2026-09-23 /api/ready answered 200 and the production database held 0 offers. Deployed internally, not launched: openvibe.deals still serves the OpenVibe.Sites placeholder until a person verifies a deals source's terms and enables it in Sources",
   "placeholderInSites": true,
-  "updated": "2026-10-04",
+  "updated": "2026-10-07",
   "features": [
     "offers with timestamped price observations shown \"as of\" and stale labels",
     "unknown prices stay unknown in pages, JSON, JSON-LD, feeds and Search",

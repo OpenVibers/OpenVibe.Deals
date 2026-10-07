@@ -93,6 +93,7 @@ function renderPage(o) {
         navLinks: NAV_LINKS.map(({ label, href }) => ({ label, href })),
         home: '/',
         css: asset('css/deals.css'),
+        styles: o.styles,   // openvibe-shared stylesheet names (the home page's showcase.css)
         release: RELEASE,
         account,
         body: o.body,
