@@ -32,6 +32,13 @@ const { run, jsonBody, privateNoStore, ApiError } = require('./errors');
 const { guard } = require('../auth/viewer');
 const { iso } = require('../domain/values');
 
+// A browser extension calling the API (its Origin is a *-extension:// scheme). DealNews' feed terms
+// forbid their feed's content inside a browser extension, so such a caller is served without any
+// offer a source policy hides from extensions (server/domain/source-policy.js). This is the only API
+// a browser helper reads; Deals exposes no extension-specific route.
+const EXTENSION_ORIGIN = /^(chrome|moz|safari-web|safari|ms-browser|devtools)-extension:\/\//i;
+const fromExtension = (req) => EXTENSION_ORIGIN.test(String(req.get('origin') || ''));
+
 function cors(origins) {
     const allowed = new Set(origins);
     return (req, res, next) => {
@@ -62,6 +69,12 @@ function createApi(ctx) {
 
     const opts = (req) => ({ ip: req.viewer.kind === 'service' ? null : req.ip, traceparent: req.ov && req.ov.traceparent });
     const offerOut = async (offer) => ({ offer: publication.offerDto(await publication.offerView(offer)) });
+    // Public reads: an offer a source policy hides from extensions is "not found" for one.
+    const readOfferOut = async (req, offer) => {
+        const v = await publication.offerView(offer);
+        if (fromExtension(req) && v.extensionExcluded) throw new ApiError(404, 'offer.not_found', 'No such offer');
+        return { offer: publication.offerDto(v) };
+    };
     const needSubject = (req) => { if (!req.viewer.subject) throw new ApiError(req.viewer.kind === 'service' ? 400 : 401, req.viewer.kind === 'service' ? 'subject.required' : 'auth.required', req.viewer.kind === 'service' ? 'X-OV-Subject must name the person this action is for' : 'Sign in first'); };
 
     // ── offers ──────────────────────────────────────────────
@@ -70,7 +83,9 @@ function createApi(ctx) {
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
         const per = 25;
         const rows = req.query.sort === 'new' ? await listings.newest(per, (page - 1) * per) : await listings.hot(per, (page - 1) * per);
-        return { sort: req.query.sort === 'new' ? 'new' : 'hot', page, total: await listings.countActive(), offers: await Promise.all(rows.map(async (o) => publication.offerDto(await publication.offerView(o)))) };
+        const views = await Promise.all(rows.map(async (o) => publication.offerView(o)));
+        const visible = fromExtension(req) ? views.filter((v) => !v.extensionExcluded) : views;
+        return { sort: req.query.sort === 'new' ? 'new' : 'hot', page, total: await listings.countActive(), offers: visible.map((v) => publication.offerDto(v)) };
     }));
 
     // A removed deal answers like its page (410, reason only); moderators still read the whole record.
@@ -80,7 +95,7 @@ function createApi(ctx) {
         if (root.status === 'disabled' && !access.isModerator(req.viewer)) {
             throw new ApiError(410, 'offer.disabled', 'This deal was removed by moderators', { id: root.id, slug: root.slug, status: 'disabled', reason: root.disabled_reason });
         }
-        return await offerOut(offer);
+        return await readOfferOut(req, offer);
     }));
 
     router.get('/offers/:id/hotness', run(async (req) => {
@@ -162,9 +177,10 @@ function createApi(ctx) {
         const p = await catalog.productBySlug(req.params.slug) || await catalog.product(req.params.slug);
         if (!p) throw new ApiError(404, 'product.not_found', 'No such product');
         const pv = await publication.productView(p);
+        const offers = fromExtension(req) ? pv.offers.filter((v) => !v.extensionExcluded) : pv.offers;
         return {
             product: { id: p.id, slug: p.slug, name: p.name, brand: p.brand, category: p.category, url: publication.abs(publication.productPath(p)), aliases: pv.aliases.map((a) => ({ kind: a.kind, value: a.value })) },
-            offers: pv.offers.map((v) => publication.offerDto(v)),
+            offers: offers.map((v) => publication.offerDto(v)),
         };
     }));
 
@@ -185,7 +201,9 @@ function createApi(ctx) {
     router.get('/stores/:domain', run(async (req) => {
         const st = await catalog.storeByDomain(req.params.domain);
         if (!st) throw new ApiError(404, 'store.not_found', 'No such store');
-        return { store: { id: st.id, domain: st.domain, name: st.name, url: publication.abs(publication.storePath(st)) }, offers: await Promise.all((await listings.byStore(st.id, 50, 0)).map(async (o) => publication.offerDto(await publication.offerView(o)))) };
+        const views = await Promise.all((await listings.byStore(st.id, 50, 0)).map(async (o) => await publication.offerView(o)));
+        const offers = fromExtension(req) ? views.filter((v) => !v.extensionExcluded) : views;
+        return { store: { id: st.id, domain: st.domain, name: st.name, url: publication.abs(publication.storePath(st)) }, offers: offers.map((v) => publication.offerDto(v)) };
     }));
 
     // ── watches ─────────────────────────────────────────────

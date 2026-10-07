@@ -30,7 +30,7 @@ The nine charter tables live in Deals' own PostgreSQL database (`ov_deals` on th
 |---|---|
 | `deal_products` | product records (name, brand, category), `/p/:slug` |
 | `deal_product_aliases` | `gtin` (normalised to 14 digits), `mpn`, `sku`, exact `name`, `url` → one product; an alias never silently moves to another product |
-| `deal_offers` | an offer: title, link (tracking parameters stripped), store, product, status (`active`/`expired`/`disabled`), **stated** expiry, review state, and the merge pointer `merged_into` |
+| `deal_offers` | an offer: title, link (tracking parameters stripped, except where a source policy keeps it verbatim — see "Per-source policy"), store, product, status (`active`/`expired`/`disabled`), **stated** expiry, review state, and the merge pointer `merged_into` |
 | `deal_offer_sources` | where an offer came from: the submission, a person's observations, or an OpenVibe.Sources item (typed reference `{sources, item, itm_…, revision}`; the item is never copied) |
 | `deal_votes` | one row per (offer, subject): `+1` / `-1` / `0` (removed, kept as history), with the weight and IP hash it was cast with |
 | `deal_hotness_snapshots` | every hotness computation with all of its inputs (formula `hot@1`) |
@@ -135,7 +135,8 @@ Consumed: `sources.item.created|updated|removed` at `POST /internal/events` (sig
 
 - The same link (normalised: fragment and tracking/affiliate parameters removed, `www.` and scheme
   ignored) cannot be posted twice: a person gets the existing deal (409 / redirect), a second Sources
-  item attaches to it as another source.
+  item attaches to it as another source. A link a source policy keeps verbatim is identified as
+  received, so it never strips parameters to collide with a normalised one.
 - Moderators merge listings of one deal (`/mod`, "possible duplicates" = same store and same product
   or title). **Merging moves nothing:** B gets `merged_into = A`; A's page, JSON, votes, history and
   sources read across the group; B's URL answers 301. A person who voted on both counts **once**
@@ -227,6 +228,37 @@ when Sources fetched them again. A removed item (takedown, licence) removes its 
 offer with no source left is disabled. Imported text is `review_state = pending` → `noindex` until a
 moderator records a review (a `usr_` subject; a service cannot review).
 
+### Per-source policy: verbatim links, attribution and browser extensions
+
+Deals normalises an imported offer's link by default: the fragment and tracking/affiliate parameters
+are removed so two posts of one deal share an identity. A source whose terms require otherwise gets
+an explicit entry in `server/domain/source-policy.js`, keyed by the Sources `source_key` — the prose
+`license_note` / `terms_note` are never parsed, the map is data:
+
+| Policy field | Effect |
+|---|---|
+| `verbatimLinks` | the link is stored and shown exactly as received (no fragment or tracking-parameter stripping, no rewriting, no `rel` change that alters the URL), and the title is used as the source stated it, with no added words |
+| `attribution` | `"Deal via <text>"` linking to `url` is shown on the offer card, the offer page and the product comparison, and carried in the offer's JSON (`.json` / API `attribution`) and its RSS/Atom/JSON-Feed summary and tags |
+| `noExtension` | the offer is excluded from the API when the caller's `Origin` is a browser-extension scheme (`chrome-extension://`, `moz-extension://`, …): absent from `GET /offers`, `GET /products/:slug` and `GET /stores/:domain`, and `GET /offers/:id` answers 404 |
+
+**DealNews** ([feed terms](https://www.dealnews.com/pages/rss.html), checked 2026-10-07) allows public
+use of its feeds only without removing or adding content within the feed display, without modifying
+the links or referral codes, with attribution to DealNews as text (e.g. "DealNews") or their 88x31
+logo, and never inside a browser extension. `dealnews-daily` therefore sets all three:
+
+```js
+'dealnews-daily': {
+    verbatimLinks: true,
+    attribution: { text: 'DealNews', url: 'https://www.dealnews.com/' },
+    noExtension: true,
+},
+```
+
+Community submissions and every source with no entry keep today's behaviour (normalised links, no
+attribution, visible to every caller). `test/import.test.js` and `test/api.test.js` cover the verbatim
+link byte-for-byte, the attribution on card, page and JSON, the untouched default, and the
+extension-facing exclusion.
+
 ## Discoverability (roadmap §32)
 
 - SSR HTML with canonical, Open Graph, JSON-LD (`Product`/`Offer`, `BreadcrumbList`, `WebSite` with
@@ -262,7 +294,8 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
 - **OpenVibe.Sources:** `sources.item.read`; a `deals`-category source must be registered and enabled
-  there (the seeded `dealnews-daily` is disabled until a person re-verifies its terms).
+  there (the seeded `dealnews-daily` is disabled until a person re-verifies its terms; its feed terms
+  are now encoded in `server/domain/source-policy.js`, so enabling it stays within them).
 - **OpenVibe.Community:** `community.comment.write`, optionally `community.comment.moderate`.
 - **OpenVibe.Events:** `events.event.publish`; `events.subscription.manage` once, for
   `scripts/subscribe.js`.

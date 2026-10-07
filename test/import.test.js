@@ -140,6 +140,45 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         assert.strictEqual((await post(news, signDeliveryHeaders(news, 'whsec-test'))).json().outcome, 'ignored');
     });
 
+    await check('a verbatim source keeps its link byte-for-byte and is attributed on the card, page and JSON', async () => {
+        // A source policy (source-policy.js, keyed by the Sources source_key) can require its links
+        // kept exactly as received and name an attribution — DealNews' feed terms. Everything else
+        // keeps today's normalisation (the kettles item above still stripped its utm_source).
+        const raw = 'https://www.dealnews.com/deals/acme-espresso/?utm_source=rss&utm_medium=feed&ref=dealnews#top';
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAA5', sourceKey: 'dealnews-daily', kind: 'article',
+            title: 'Acme espresso machine, $199 (DealNews)', url: raw, retrievedAt: t.clock.now() }));
+        const s = await t.ctx.importer.pull();
+        assert.deepStrictEqual(s.outcomes, { created: 1 }, JSON.stringify(s));
+
+        const offer = await byUrl(raw);
+        assert.ok(offer, 'the link is stored exactly as received');
+        assert.strictEqual(offer.url, raw, 'no fragment or utm_/ref parameters stripped');
+
+        // The card and the page both carry the attribution line and the link as received.
+        const escaped = raw.replace(/&/g, '&amp;');
+        const page = await t.get(`/d/${offer.slug}`);
+        assert.match(page.text, /Deal via <a href="https:\/\/www\.dealnews\.com\/" rel="nofollow noopener">DealNews<\/a>/);
+        assert.ok(page.text.includes(`href="${escaped}"`), 'the offer page links to the link as received');
+        const card = await t.get('/new');
+        assert.match(card.text, /Deal via <a href="https:\/\/www\.dealnews\.com\/" rel="nofollow noopener">DealNews<\/a>/);
+
+        // ...and the offer's JSON and the feeds.
+        const json = await t.offerJson(offer.slug);
+        assert.strictEqual(json.link, raw);
+        assert.deepStrictEqual(json.attribution, { text: 'DealNews', url: 'https://www.dealnews.com/' });
+        assert.match((await t.get('/feed.xml')).text, /Deal via DealNews/);
+        assert.match((await t.get('/feed.json')).text, /Deal via DealNews/);
+
+        // A browser extension is served by the API without it; an ordinary caller still gets it.
+        const ext = { headers: { origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop' } };
+        const list = await t.get('/api/v1/offers?sort=new', ext);
+        assert.ok(!list.text.includes('dealnews.com'), 'the extension list omits the verbatim source');
+        assert.strictEqual((await t.get(`/api/v1/offers/${offer.id}`, ext)).status, 404);
+        const normal = await t.get(`/api/v1/offers/${offer.id}`);
+        assert.strictEqual(normal.status, 200);
+        assert.deepStrictEqual(normal.json().offer.attribution, { text: 'DealNews', url: 'https://www.dealnews.com/' });
+    });
+
     await check('Sources down: the pull fails honestly (readiness says so), keeps its cursor, invents nothing', async () => {
         const cursor = await t.ctx.importer.cursor();
         const offers = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get()).n;
