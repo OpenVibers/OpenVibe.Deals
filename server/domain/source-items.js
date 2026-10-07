@@ -22,6 +22,10 @@
  *                 headline — it stays "not stated" until a structured source or a person states it
  *   other kinds   skipped
  *
+ * A source policy (server/domain/source-policy.js) may require a source's links kept verbatim and
+ * name an attribution (DealNews' feed terms); such a source's links are stored and shown exactly as
+ * received, its title is used as stated, and the attribution is shown with every offer it touches.
+ *
  * observed_at = the item's provenance.retrieved_at (when Sources saw it). An item Deals already
  * imported produces a new observation only when its revision or its retrieved_at advanced, so
  * replays are no-ops. Two items (or a submission and an item) with the same link attach to the same
@@ -33,8 +37,9 @@
  */
 const { createChangeCursor, pullChanges } = require('openvibe-publishing/ingest');
 const {
-    normalizeUrl, urlKey, parseAmount, SCHEMA_AVAILABILITY, SCHEMA_CONDITION, iso,
+    normalizeUrl, verbatimUrl, urlKey, parseAmount, SCHEMA_AVAILABILITY, SCHEMA_CONDITION, iso,
 } = require('./values');
+const { keepsLinksVerbatim } = require('./source-policy');
 
 const CURSOR = 'sources.deals.after';
 
@@ -88,8 +93,12 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
     function candidates(item) {
         const f = item.fields || {};
         const stated = (t) => { const ms = t ? Date.parse(t) : NaN; return Number.isFinite(ms) ? ms : null; };
+        // A source policy may require its links to be kept exactly as received (DealNews' feed
+        // terms); every other source keeps today's normalisation.
+        const verbatim = keepsLinksVerbatim(item.source_key);
+        const linkOf = (raw) => (verbatim ? verbatimUrl(raw) : normalizeUrl(raw));
         if (item.kind === 'offer') {
-            const url = normalizeUrl(f.url || item.canonical_url);
+            const url = linkOf(f.url || item.canonical_url);
             if (!url || !item.title) return [];
             return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), store_name: f.seller || null }];
         }
@@ -98,11 +107,12 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
             const seen = new Set();
             const out = [];
             for (const o of (Array.isArray(f.offers) ? f.offers : []).slice(0, 20)) {
-                const url = normalizeUrl(o.url || item.canonical_url);
+                const url = linkOf(o.url || item.canonical_url);
                 if (!url || seen.has(urlKey(url))) continue;
                 seen.add(urlKey(url));
                 out.push({
-                    part: urlKey(url), url, title: o.seller ? `${item.title} — ${o.seller}` : item.title, description: item.summary,
+                    // A verbatim source's title is used as stated, with no added words.
+                    part: urlKey(url), url, title: !verbatim && o.seller ? `${item.title} — ${o.seller}` : item.title, description: item.summary,
                     obs: obsFields(o), expires_at: stated(o.valid_until), store_name: o.seller || null,
                     product: { name: item.title, brand: f.brand, gtin: f.gtin, mpn: f.mpn, sku: f.sku },
                 });
@@ -110,7 +120,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
             return out;
         }
         if (item.kind === 'article' || item.kind === 'record') {
-            const url = normalizeUrl(item.canonical_url);
+            const url = linkOf(item.canonical_url);
             if (!url || !item.title) return [];
             return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields({}), expires_at: null, store_name: null }];
         }

@@ -20,6 +20,7 @@
  */
 const seo = require('openvibe-publishing/seo');
 const { iso } = require('./values');
+const { attributionOf, hidesFromExtension } = require('./source-policy');
 
 function createPublication({ config, store, reads, catalog }) {
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
@@ -65,6 +66,7 @@ function createPublication({ config, store, reads, catalog }) {
         const latest = await reads.latestObservation(ids);
         const tally = await reads.tally(ids);
         const snap = await reads.lastSnapshot(root.id);
+        const sources = await reads.sources(ids);
         return {
             root,
             ids,
@@ -73,7 +75,11 @@ function createPublication({ config, store, reads, catalog }) {
             observations: await reads.observations(ids),
             latest,
             freshness: freshness(latest, now),
-            sources: await reads.sources(ids),
+            sources,
+            // A source policy may require attribution (shown on cards, the page, JSON and feeds) and
+            // may forbid the offer's content in a browser extension (DealNews' feed terms).
+            attribution: attributionOf(sources),
+            extensionExcluded: hidesFromExtension(sources),
             members: await Promise.all(ids.filter((id) => id !== root.id).map(async (id) => await reads.get(id))),
             tally,
             hotness: snap,
@@ -107,6 +113,7 @@ function createPublication({ config, store, reads, catalog }) {
             // "latest", never "current": whether it still holds is what freshness says.
             latest_observation: v.latest ? observationDto(v.latest) : null,
             freshness: v.freshness,
+            attribution: v.attribution || null,
             observations: v.observations.map(observationDto),
             sources: v.sources.map((s) => ({
                 id: s.id, kind: s.kind, listing: s.offer_id,

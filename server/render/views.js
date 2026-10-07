@@ -54,6 +54,16 @@ function statusBadge(root) {
 
 const csrfField = (csrf) => html`<input type="hidden" name="csrf" value="${csrf}">`;
 
+/**
+ * The attribution line a source policy can require (e.g. DealNews' feed terms): "Deal via <source>"
+ * linking to the source's site. Shown wherever the offer's content appears — cards, the offer page
+ * and the product comparison. The link to the source never replaces or rewrites the offer's own link.
+ */
+function attributionLine(a) {
+    if (!a) return '';
+    return html`<p class="attribution">Deal via <a href="${safeHref(a.url)}" rel="nofollow noopener">${a.text}</a></p>`;
+}
+
 /** The one-line "latest observation" block used on cards and pages. */
 function latestLine(v) {
     const o = v.latest;
@@ -71,6 +81,7 @@ function offerCard(v, urls) {
 <div class="deal-body">
 <h2 class="deal-title"><a href="${urls.offerPath(r)}">${r.title}</a> ${statusBadge(r)}</h2>
 ${latestLine(v)}
+${attributionLine(v.attribution)}
 <p class="meta">${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}</p>
 </div></li>`;
 }
@@ -147,6 +158,7 @@ ${myVote ? html`<button name="value" value="remove">Remove my vote</button>` : '
 ${notice ? html`<p class="notice${notice.error ? ' error' : ''}" role="status">${notice.text}</p>` : ''}
 <article class="deal" data-offer="${r.id}">
 <h1>${r.title} ${statusBadge(r)}</h1>
+${attributionLine(v.attribution)}
 ${r.status === 'expired' ? html`<p class="notice">This deal expired${r.expired_at ? html` on ${timeEl(r.expired_at)}` : ''}${r.expired_reason === 'stated_expiry' ? ' (its stated end date passed)' : ''}.</p>` : ''}
 <section class="latest" aria-label="Latest observation">
 ${latestLine(v)}
@@ -207,7 +219,7 @@ ${(mergedComments || []).map((mc) => html`<h3>Discussion from the merged listing
 function productPage({ pv, urls }) {
     const p = pv.product;
     const rows = pv.offers.map((v) => html`<tr>
-<td><a href="${urls.offerPath(v.root)}">${v.root.title}</a> ${statusBadge(v.root)}</td>
+<td><a href="${urls.offerPath(v.root)}">${v.root.title}</a> ${statusBadge(v.root)}${attributionLine(v.attribution)}</td>
 <td>${v.store ? v.store.name || v.store.domain : 'not stated'}</td>
 <td data-price="${v.latest && v.latest.price != null ? v.latest.price : ''}">${priceText(v.latest)}${v.latest && shippingText(v.latest) ? html` <span class="meta">${shippingText(v.latest)}</span>` : ''}</td>
 <td>${v.latest ? timeEl(v.latest.observed_at) : html`<span class="meta">never observed</span>`}</td>

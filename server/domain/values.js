@@ -71,6 +71,21 @@ function normalizeUrl(input) {
     return s.length <= 2048 ? s : null;
 }
 
+/**
+ * An http(s) URL validated but kept exactly as the source stated it — no fragment removal, no
+ * tracking-parameter stripping, no host lower-casing, no re-encoding (source policy
+ * `verbatimLinks`, e.g. DealNews' feed terms). A URL Deals cannot use is null, as with normalizeUrl.
+ */
+function verbatimUrl(input) {
+    if (input == null || input === '') return null;
+    const s = String(input);
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (u.username || u.password) return null;
+    return s.length <= 2048 ? s : null;
+}
+
 /** The identity used to find duplicates: normalised URL without scheme and without "www.". */
 function urlKey(normalized) {
     if (!normalized) return null;
@@ -79,7 +94,7 @@ function urlKey(normalized) {
 
 module.exports = {
     ApiError, newId, CONDITIONS, AVAILABILITY, AVAILABILITY_LABEL, SCHEMA_AVAILABILITY, SCHEMA_CONDITION,
-    normalizeUrl, urlKey,
+    normalizeUrl, urlKey, verbatimUrl,
     domainOf: normalize.domainOf, slugify: normalize.slugify,
     parseAmount: asApiError(normalize.parseAmount), parseCurrency: asApiError(normalize.parseCurrency),
     parseEnum: asApiError(normalize.parseEnum), parseInstant: asApiError(normalize.parseInstant),
