@@ -288,8 +288,8 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
 - **Packages** (pinned release tarballs): `openvibe-publishing` v1.3.0 (seo gate, JSON-LD, feeds,
   sitemaps, index-hooks, discussion, ssr, and the shared ingest/publication chassis — the Sources
   client, change cursor and pull loop, signed event consumer, common normalisers, and the publication
-  glue Deals' indexing uses), `openvibe-contracts` v0.97.0, `openvibe-shared` v2.12.0
-  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.26.0 (sso, outbox,
+  glue Deals' indexing uses), `openvibe-contracts` v0.97.0, `openvibe-shared` v2.13.0
+  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.35.0 (sso, outbox,
   inbox, webhook signatures v2, service tokens, per-actor limits).
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
