@@ -1,7 +1,7 @@
 /* OpenVibe.Deals — readable, theme-token driven (openvibe-shared presets). No JavaScript needed. */
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg-primary, #0a0f1c); color: var(--text-primary, #e6edf7); font: 17px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { margin: 0; background: var(--bg-primary, #0a0f1c); color: var(--text-primary, #e6edf7); font: 17px/1.65 var(--ov-font, 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif); }
 a { color: var(--accent-light, #60a5fa); }
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--accent, #3b82f6); outline-offset: 2px; }
 .skip { position: absolute; left: -9999px; }
@@ -47,15 +47,26 @@ form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
 .tabs form.search { margin-left: auto; display: flex; gap: 6px; }
 .tabs form.search input { width: 200px; }
 .tabs form.search button { margin: 0; }
-.deal-list { list-style: none; padding: 0; }
-.deal-item { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border, #1f2d47); }
-.deal-item .score { min-width: 48px; text-align: center; font-weight: 700; font-size: 1.1rem; padding-top: 4px; }
-.deal-body { min-width: 0; flex: 1; }
-.deal-title { margin: 0 0 4px; font-size: 1.15rem; overflow-wrap: anywhere; }
+.deal-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 10px; }
+.deal-item { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 14px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border, #1f2d47); background: var(--bg-card, #131c2e); transition: border-color .15s, transform .15s; }
+.deal-item:hover { border-color: color-mix(in srgb, var(--accent, #3b82f6) 55%, var(--border, #1f2d47)); transform: translateY(-1px); }
+.deal-item .score { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 56px; border-radius: 12px; font-weight: 800; font-size: 1rem; color: var(--text-secondary, #96a7c2); background: var(--bg-secondary, #0f1729); border: 1px solid var(--border, #1f2d47); }
+.deal-item .score span { font-size: .7rem; line-height: 1; color: var(--text-muted, #7386a3); }
+.deal-item .score.up { color: var(--success, #22c55e); border-color: color-mix(in srgb, var(--success, #22c55e) 40%, transparent); }
+.deal-item .score.up span { color: var(--success, #22c55e); }
+.deal-item .score.down { color: var(--warning, #f59e0b); }
+.deal-body { min-width: 0; }
+.deal-title { margin: 0 0 6px; font-size: 1.05rem; line-height: 1.35; overflow-wrap: anywhere; }
 .deal-title a { color: var(--text-primary); text-decoration: none; }
-.deal-title a:hover { text-decoration: underline; }
-.price-line { margin: 4px 0; }
-.price { font-size: 1.1rem; }
+.deal-title a:hover { color: var(--accent-light, #60a5fa); text-decoration: underline; text-underline-offset: 3px; }
+.price-line { margin: 0 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: .9rem; }
+.price { font-size: 1.05rem; color: var(--warning, #f59e0b); }
+.price.price-none { font-size: .8rem; font-weight: 500; color: var(--text-muted, #7386a3); }
+.price-line .as-of { font-size: .8rem; }
+.attribution { margin: 0; font-size: .82rem; color: var(--text-muted, #7386a3); }
+.deal-item .meta { margin: 2px 0 0; font-size: .82rem; }
+@media (max-width: 600px) { .deal-item { grid-template-columns: 44px minmax(0, 1fr); padding: 12px; } .deal-item .score { height: 48px; } }
+@media (prefers-reduced-motion: reduce) { .deal-item { transition: none; } }
 .badge.fresh { border-color: var(--success, #22c55e); color: var(--success, #22c55e); }
 .badge.stale, .badge.expired { border-color: var(--warning, #f59e0b); color: var(--warning, #f59e0b); }
 .stale-notice { border-color: var(--warning, #f59e0b); }
@@ -71,3 +82,8 @@ tr.removed { opacity: .6; }
 details.card summary { cursor: pointer; font-weight: 600; }
 code { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .tabs form.search { margin-left: 0; width: 100%; } .tabs form.search input { width: 100%; } .deal-item .score { min-width: 36px; } }
+
+/* The front page's showcase sections share the page's gutter, so the hero, the cards and the list line up. */
+.page { max-width: 1080px; }
+.account-bar { max-width: 1080px; }
+.page .sc-hero, .page .sc-sec, .page .sc-cta { padding-left: 0; padding-right: 0; }
