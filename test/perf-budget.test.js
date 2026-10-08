@@ -18,7 +18,7 @@ const BUDGETS = {
     jsRawKB: 250,   // 239.1 (212.2 before web-runtime.js)
     jsBrotliKB: 60,   // 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 2 (deals.css, openvibe-shared showcase.css)
-    cssRawKB: 18.5,   // 17.1 (5.6 before showcase.css)
+    cssRawKB: 21,   // 19.0 with the deal cards
     cssBrotliKB: 4.6,   // 4.1 (1.5 before showcase.css)
     externalFiles: 1,   // 0
 };
