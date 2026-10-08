@@ -67,7 +67,9 @@ function attributionLine(a) {
 /** The one-line "latest observation" block used on cards and pages. */
 function latestLine(v) {
     const o = v.latest;
-    return html`<p class="price-line"><strong class="price" data-price="${o && o.price != null ? o.price : ''}">${priceText(o)}</strong>
+    // A price nobody stated is said quietly: a headline-only source (DealNews' feed) states its price in the title.
+    const stated = o && o.price != null;
+    return html`<p class="price-line"><strong class="price${stated ? '' : ' price-none'}" data-price="${stated ? o.price : ''}">${priceText(o)}</strong>
 ${o && shippingText(o) ? html` <span class="meta">${shippingText(o)}</span>` : ''}
 ${o && o.availability ? html` · <span class="meta">${AVAILABILITY_LABEL[o.availability]}</span>` : ''}
 ${o ? html` <span class="meta as-of">as of ${timeEl(o.observed_at)}</span>` : ''} ${freshnessBadge(v.freshness, v.now)}</p>`;
@@ -77,7 +79,7 @@ function offerCard(v, urls) {
     const r = v.root;
     const score = v.tally.up - v.tally.down;
     return html`<li class="deal-item">
-<div class="score" title="${v.tally.up} up, ${v.tally.down} down">${score > 0 ? `+${score}` : score}</div>
+<div class="score${score > 0 ? ' up' : score < 0 ? ' down' : ''}" title="${v.tally.up} up, ${v.tally.down} down"><span aria-hidden="true">▲</span>${score > 0 ? `+${score}` : score}</div>
 <div class="deal-body">
 <h2 class="deal-title"><a href="${urls.offerPath(r)}">${r.title}</a> ${statusBadge(r)}</h2>
 ${latestLine(v)}
