@@ -111,6 +111,15 @@ decides them with the contracts grant rule.
 Consumed: `sources.item.created|updated|removed` at `POST /internal/events` (signed,
 `DEALS_EVENTS_SECRET`, inbox-deduplicated). They carry no prices, so they only wake the importer.
 
+Account export and deletion (ADR-033): `network.account.export_requested` and `network.account.deleted` arrive at the
+same route and are answered by `server/domain/account-data.js` (`openvibe-sdk/account-data`). An export part carries
+the person's profile name, votes, watches, the offers, price reports, products and reports they contributed. A deletion
+removes their watches (and the notifications under them), votes, name and rate-limit windows. Offers, price reports,
+products, aliases and reports stay in the shared catalog with the person's id set to NULL, and a vote-ring flag's
+evidence names them as `deleted`. A staff member's `moderation_log` rows stay attributed (counted as retained). The
+two subscriptions are created at boot when missing (`startSubscriptions`, needs `EVENTS_URL` and
+`DEALS_EVENTS_SECRET`); `account_data_events` keeps one receipt per export and deletion.
+
 ## Prices and freshness
 
 - Every price, shipping cost, condition and availability is a row in `deal_price_observations` with
@@ -309,7 +318,8 @@ Each grant is `[client, capability, audience]`:
 
 - `[deals, identity.subject.resolve, openvibe.network]`
 - `[deals, events.event.publish, openvibe.events]`
-- `[deals, events.subscription.manage, openvibe.events]` (only to run `scripts/subscribe.js`)
+- `[deals, events.subscription.manage, openvibe.events]` (`scripts/subscribe.js`, and the account subscriptions at boot)
+- `[deals, network.account.export.contribute, openvibe.network]` and `[deals, network.account.deletion.confirm, openvibe.network]` (ADR-033; granted last, once this release is live)
 - `[deals, sources.item.read, openvibe.sources]`
 - `[deals, community.comment.write, openvibe.community]`
 - `[deals, community.comment.moderate, openvibe.community]` (optional: hides a disabled deal's thread)

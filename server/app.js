@@ -41,6 +41,8 @@ const { createPages } = require('./http/pages');
 const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
 const { createEvents } = require('./http/events');
+const accountDataLib = require('./domain/account-data');
+const { createNetworkSender } = require('openvibe-sdk/account-data');
 const { createDealsReadiness } = require('./observability');
 const { createActorLimits } = require('./http/actor-limits');
 const { createWorker } = require('./worker');
@@ -98,7 +100,14 @@ async function createApp(opts = {}) {
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, store, offers, hotness, indexing, listings, importer, limits, log });
 
-    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, auth, viewers, worker, indexnow };
+    // Account export and deletion (ADR-033, domain/account-data.js), pushed to Network's internal routes with this service's
+    // own client-credentials token; a test injects a stand-in through opts.accountSend.
+    const accountData = accountDataLib.create({ db: store.db, log });
+    const accountSend = opts.accountSend || (config.oauth.clientSecret
+        ? createNetworkSender({ networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl })
+        : null);
+
+    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, auth, viewers, worker, indexnow, accountData, accountSend };
 
     const app = express();
     app.disable('x-powered-by');
@@ -169,7 +178,7 @@ async function createApp(opts = {}) {
 
     // ── Events consumer, API ────────────────────────────────
     // Never per-actor limited: Events pushes at its own pace, and a 429 would only make it retry and fall behind.
-    app.use(createEvents({ config, store, importer }));
+    app.use(createEvents({ config, store, importer, accountData: ctx.accountData, accountSend: ctx.accountSend }));
     app.use('/api/v1', rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false }), createApi(ctx));
 
     // ── Discovery, public pages ─────────────────────────────

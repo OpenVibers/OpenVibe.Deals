@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Events consumer: POST /internal/events, the endpoint of Deals' OpenVibe.Events subscription to
- * `sources.item.*` (filter: payload.category = deals). The signature (X-OpenVibe-Signature v2,
+ * Events consumer: POST /internal/events, the endpoint of Deals' OpenVibe.Events subscriptions to
+ * `sources.item.*` (filter: payload.category = deals) and to network.account.export_requested and
+ * network.account.deleted (ADR-033, answered by server/domain/account-data.js through openvibe-sdk/account-data). The signature (X-OpenVibe-Signature v2,
  * ±300 s; several comma-separated secrets allow rotation) and the exactly-once inbox come from the
  * chassis (openvibe-publishing/ingest.createEventConsumer): the receipt (consumer, event_id) and the
  * change commit in one PostgreSQL transaction, so a redelivery changes nothing.
@@ -16,8 +17,14 @@ const { createEventConsumer } = require('openvibe-publishing/ingest');
 
 const CONSUMER = 'deals-sources';
 const TYPES = new Set(['sources.item.created', 'sources.item.updated', 'sources.item.removed']);
+const { TOPICS: ACCOUNT_TOPICS } = require('openvibe-sdk/account-data');
 
-function createEvents({ config, store, importer }) {
+/**
+ * accountData + accountSend: the account export and deletion handle and its sender to Network. A failure (Network
+ * unreachable, a refusal worth retrying) throws, the inbox receipt rolls back and Events redelivers; account-data keeps
+ * its own receipt per export and deletion id, so a redelivery never erases twice.
+ */
+function createEvents({ config, store, importer, accountData = null, accountSend = null }) {
     const router = express.Router();
     const consumer = createEventConsumer({ db: store.db, secrets: config.events.webhookSecrets, consumer: CONSUMER, now: store.now });
 
@@ -26,6 +33,10 @@ function createEvents({ config, store, importer }) {
         let r;
         try {
             r = await consumer.apply(raw, req.headers, async (event) => {
+                if (ACCOUNT_TOPICS.includes(event.event_type)) {
+                    if (!accountData || !accountSend) throw new Error('account export and deletion are not configured');
+                    return await accountData.apply(event, { send: accountSend });
+                }
                 if (!TYPES.has(event.event_type) || event.source !== 'sources') return 'ignored';
                 const category = event.payload && event.payload.category;
                 if (category !== 'deals') return 'ignored';
