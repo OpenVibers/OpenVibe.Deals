@@ -7,14 +7,14 @@
   "runtime": "node 22, express 4, PostgreSQL 18 (openvibe-sdk/db, async) + Valkey 9",
   "port": 4840,
   "domain": "openvibe.deals",
-  "contracts": "openvibe-contracts v0.112.0",
+  "contracts": "openvibe-contracts v0.122.1",
   "sdk": "openvibe-sdk v0.37.0",
   "shared": "openvibe-shared v2.17.0",
   "packages": [
     "openvibe-publishing v1.3.0",
-    "openvibe-contracts v0.97.0",
-    "openvibe-shared v2.13.0",
-    "openvibe-sdk v0.26.0"
+    "openvibe-contracts v0.122.1",
+    "openvibe-shared v2.17.0",
+    "openvibe-sdk v0.37.0"
   ],
   "capabilities": [
     "deals.offer.submit",
