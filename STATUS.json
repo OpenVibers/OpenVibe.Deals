@@ -9,7 +9,7 @@
   "domain": "openvibe.deals",
   "contracts": "openvibe-contracts v0.112.0",
   "sdk": "openvibe-sdk v0.37.0",
-  "shared": "openvibe-shared v2.15.0",
+  "shared": "openvibe-shared v2.17.0",
   "packages": [
     "openvibe-publishing v1.3.0",
     "openvibe-contracts v0.97.0",
@@ -52,5 +52,5 @@
     "SDK outbox events and Search index documents",
     "per-actor limits (openvibe-sdk/limits)"
   ],
-  "updated": "2026-10-08"
+  "updated": "2026-10-09"
 }
