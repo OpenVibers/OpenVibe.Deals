@@ -31,7 +31,7 @@ label input[type=checkbox] { margin-right: 6px; }
 input, textarea, select { width: 100%; font: inherit; color: var(--text-primary); background: var(--bg-input, #0d1424); border: 1px solid var(--border-light, #2c3d5c); border-radius: 6px; padding: 8px 10px; }
 input[type=checkbox] { width: auto; }
 textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
-button, .button { display: inline-block; margin-top: 10px; font: inherit; font-weight: 600; background: var(--accent, #3b82f6); color: var(--on-accent, #fff); border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; text-decoration: none; }
+button, .button { display: inline-block; margin-top: 10px; font: inherit; font-weight: 600; background: var(--accent-strong, var(--accent, #3472d8)); color: var(--on-accent-strong, var(--on-accent, #fff)); border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; text-decoration: none; }
 button.danger { background: var(--danger, #ef4444); }
 form.inline { display: inline; }
 form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
