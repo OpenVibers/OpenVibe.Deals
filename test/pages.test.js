@@ -99,6 +99,22 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.strictEqual((await t.get('/p/nope')).status, 404);
     });
 
+    await check('search caps its query: 100 characters and 5 words, extra words ignored', async () => {
+        // Five words that all match the deal (title "Mini drone with camera", description "Folding **mini** drone.").
+        const five = await t.get(`/search?q=${encodeURIComponent('mini drone with camera folding')}`);
+        assert.strictEqual(five.status, 200);
+        assert.match(five.text, /Mini drone with camera/);
+        // A sixth word that matches nothing is ignored rather than required, so the deal still matches.
+        const six = await t.get(`/search?q=${encodeURIComponent('mini drone with camera folding zzznomatch')}`);
+        assert.strictEqual(six.status, 200);
+        assert.match(six.text, /Mini drone with camera/, 'the 6th word is ignored');
+        assert.doesNotMatch(six.text, /No active deals match/);
+        // The raw query is truncated to 100 characters before it is echoed or searched: the search box
+        // holds exactly 100 characters (the quote right after the 100th proves no more survive there).
+        const capped = await t.get(`/search?q=${'a'.repeat(150)}`);
+        assert.ok(capped.text.includes(`value="${'a'.repeat(100)}"`), 'the echoed query is capped at 100 characters');
+    });
+
     await check('the submitter marks it expired: badge, noindex (expired), deals.offer.expired, out of lists and sitemaps', async () => {
         const other = await t.get(`/d/${deal.slug}/expire`, { as: bob, form: {} });
         assert.strictEqual(other.status, 403, 'only the submitter or a moderator');

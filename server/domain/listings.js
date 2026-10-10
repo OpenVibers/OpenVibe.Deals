@@ -10,6 +10,11 @@
  */
 const { tokens } = require('./values');
 
+/** Search bounds: a search runs a LIKE scan per word, so a caller cannot grow the work without limit. */
+const SEARCH_QUERY_MAX = 100;   // characters kept from the raw query
+const SEARCH_WORDS_MAX = 5;     // words matched (every word must match, so extras only narrow); extras ignored
+const SEARCH_RESULTS_MAX = 100; // rows per query, whatever the caller asks
+
 function createListings({ store }) {
     const { db } = store;
     const LATEST = 'h.id = (SELECT MAX(id) FROM deal_hotness_snapshots WHERE offer_id = o.id)';
@@ -31,14 +36,16 @@ function createListings({ store }) {
     };
 
     async function search(query, { limit = 20, offset = 0, includeExpired = false } = {}) {
-        const words = [...new Set(tokens(query))].slice(0, 6);
+        const words = [...new Set(tokens(String(query || '').slice(0, SEARCH_QUERY_MAX)))].slice(0, SEARCH_WORDS_MAX);
         if (!words.length) return { total: 0, rows: [] };
+        const take = Math.min(Math.max(1, Math.trunc(limit) || 20), SEARCH_RESULTS_MAX);
+        const skip = Math.max(0, Math.trunc(offset) || 0);
         const where = words.map((_, i) => `(' ' || lower(o.title) || ' ' || lower(COALESCE(o.description, '')) || ' ') LIKE @w${i}`).join(' AND ');
         const params = Object.fromEntries(words.map((w, i) => [`w${i}`, `%${w.replace(/[%_\\]/g, (c) => `\\${c}`)}%`]));
         const status = includeExpired ? "o.status <> 'disabled'" : "o.status = 'active'";
         const base = `FROM deal_offers o WHERE o.merged_into IS NULL AND ${status} AND ${where.replace(/LIKE (@w\d+)/g, "LIKE $1 ESCAPE '\\'")}`;
         const total = (await db.prepare(`SELECT COUNT(*) AS n ${base}`).get(params)).n;
-        const rows = await db.prepare(`SELECT o.* ${base} ORDER BY o.created_at DESC LIMIT @limit OFFSET @offset`).all({ ...params, limit, offset });
+        const rows = await db.prepare(`SELECT o.* ${base} ORDER BY o.created_at DESC LIMIT @limit OFFSET @offset`).all({ ...params, limit: take, offset: skip });
         return { total, rows, words };
     }
 

@@ -26,7 +26,8 @@
  *
  * Never limited: /api/health, /api/ready, /release.json, /metrics, sign-in, the signed Events
  * deliveries at /internal/events (Sources wake-ups: Events pushes at its own pace, and a 429 would only
- * make it retry and fall behind), and the pages and feeds people read.
+ * make it retry and fall behind), and the pages and feeds people read — except /search, which runs a
+ * LIKE scan per word and so takes the read defaults like the API.
  */
 const { createActorLimiter, createValkeyLimitStore, defaultActor } = require('openvibe-sdk/limits');
 
