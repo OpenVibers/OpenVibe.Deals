@@ -34,6 +34,14 @@ const { actor, serviceItself } = require('../server/http/actor-limits');
         assert.strictEqual((await t.get('/api/v1/offers', { as: ben })).status, 200, 'another person still passes');
     });
 
+    await check('/search takes the read defaults too: 3 a minute per person, then 429 rate_limited', async () => {
+        const cat = t.network.addUser('cat');
+        for (let i = 0; i < 3; i++) assert.strictEqual((await t.get('/search?q=drone', { as: cat })).status, 200);
+        const r = await t.get('/search?q=drone', { as: cat });
+        assert.strictEqual(r.status, 429, r.text);
+        assert.ok(r.json().detail.includes('deals.search'), r.json().detail);
+    });
+
     await check('a service naming the person counts against that person', async () => {
         const r = await t.get('/api/v1/watches', { as: svc, headers: { 'X-OV-Subject': ann.subject } });
         assert.deepStrictEqual([r.status, r.json().code], [429, 'rate_limited']);

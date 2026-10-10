@@ -298,8 +298,8 @@ function createPages(ctx) {
 
     // ── search ──────────────────────────────────────────────
 
-    router.get('/search', wrap(async (req, res) => {
-        const q = String(req.query.q || '').slice(0, 200);
+    router.get('/search', actorLimits.reads('deals.search'), wrap(async (req, res) => {
+        const q = String(req.query.q || '').slice(0, 100);
         const page = pageNumber(req);
         const r = q ? await listings.search(q, { limit: PER_PAGE, offset: (page - 1) * PER_PAGE }) : { total: 0, rows: [] };
         const pager = q ? ssr.paginate({ page, perPage: PER_PAGE, total: r.total, href: (p) => `/search?q=${encodeURIComponent(q)}&page=${p}` }) : null;
