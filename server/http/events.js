@@ -45,7 +45,7 @@ function createEvents({ config, store, importer, accountData = null, accountSend
         } catch (err) { return next(err); }
         if (r.status === 503) return http.sendProblem(res, 503, 'deals.webhook_disabled', { detail: 'DEALS_EVENTS_SECRET is not set', ctx: req.ov });
         if (r.status === 401) return http.sendProblem(res, 401, 'deals.bad_signature', { detail: 'X-OpenVibe-Signature-V2 does not verify or is outside the replay window', ctx: req.ov });
-        if (r.status === 400) return http.sendProblem(res, 400, 'deals.bad_delivery', { detail: 'body must be { event: <envelope>, seq }', ctx: req.ov });
+        if (r.status === 400) return http.sendProblem(res, 400, 'deals.bad_delivery', { detail: 'body must be { event: <envelope> }', ctx: req.ov });
         if (!r.duplicate && r.outcome === 'import_scheduled') importer.kick();
         res.status(200).json({ event_id: r.event_id, duplicate: Boolean(r.duplicate), outcome: r.duplicate ? null : r.outcome });
     });
