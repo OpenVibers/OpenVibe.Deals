@@ -2,10 +2,9 @@
 
 > Deals submitted and voted on by the community, with source, price and freshness always shown.
 
-**Status:** alpha (roadmap Wave 18, Deals). The service runs and its tests pass. It is **deployed
-internally, not launched**: it runs on the production host on 127.0.0.1:4840 only (release `e72aeec`,
-`/api/ready` 200) with an empty database (0 offers), and `openvibe.deals` still shows its placeholder
-from OpenVibe.Sites. Its capabilities and service manifest are registered in openvibe-contracts v0.97.0.
+**Status:** alpha (roadmap Wave 18, Deals). The service runs and its tests pass. It is **public at
+`openvibe.deals` since 2026-10-08** (contracts 0.118.0), with offers from the DealNews daily feed through OpenVibe.Sources. Its capabilities and
+service manifest are registered in openvibe-contracts v0.97.0.
 **Domain:** `openvibe.deals` · **Port:** 4840 · **Service id:** `deals`
 **Plan:** OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026), §12.9; roadmap §15.13, §29, §32.
 **License:** AGPL-3.0 (same as every OpenVibe service).
@@ -357,22 +356,22 @@ full list with audiences is under [Grants the Network must hold](#grants-the-net
 
 ## Launch rule
 
-This repository alone doesn't make the product live. `openvibe.deals` keeps its placeholder on
-[OpenVibers/OpenVibe.Sites](https://github.com/OpenVibers/OpenVibe.Sites) until all of plan §12.12
-exists. Status against each point:
+This repository alone doesn't make the product live. The plan §12.12 launch rule is met:
+`openvibe.deals` is served from this service's own domain since 2026-10-08, no longer as a placeholder
+on [OpenVibers/OpenVibe.Sites](https://github.com/OpenVibers/OpenVibe.Sites). Status against each point:
 
 1. **Runtime, health, readiness, observability:** done (`/api/health`, `/api/ready` with six checks, `/metrics`, `/release.json`).
 2. **Canonical identity and auth:** done; the `deals` OAuth client, service principal and grants exist in production.
 3. **SSR public routes useful without JS:** done.
-4. **Persistence and end-to-end workflows:** done and deployed on the host (loopback only, empty database); imports need a registered, enabled deals source in Sources, and none is enabled.
+4. **Persistence and end-to-end workflows:** done and deployed on the host; offers are imported from the enabled `dealnews-daily` source in OpenVibe.Sources (936 offers on 2026-10-12).
 5. **Capability and event registration against OpenVibe.Contracts:** done (openvibe-contracts v0.97.0).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. There is nothing to migrate and no seed (below); the threat review is below.
 7. **Acceptance tests:** done.
 
-**The launch release does all of these in one release:** removes `openvibe.deals` from
-`OpenVibe.Sites/sites.json`, switches routing (nginx vhost, DNS, TLS), flips the Network hub entry
-(`server/chrome/sites.js`, `status: 'soon'`) and registers maturity in the ecosystem registry. A
-placeholder never counts as an implemented service, and this README doesn't call the service live.
+**The launch release did all of these in one release:** removed `openvibe.deals` from
+`OpenVibe.Sites/sites.json`, switched routing (nginx vhost, DNS, TLS), flipped the Network hub entry
+(`server/chrome/sites.js`, `status: 'soon'`) and registered maturity in the ecosystem registry. A
+placeholder never counts as an implemented service, and the site is public.
 
 ## Seed
 
