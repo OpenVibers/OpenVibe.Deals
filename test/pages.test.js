@@ -4,6 +4,17 @@
  * sitemaps and Search; discovery artifacts; caching; operations endpoints. No seed deals.
  */
 const assert = require('assert');
+
+function assertSitemapLastmods(xml, tag = 'url') {
+    const entries = [...xml.matchAll(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g'))];
+    for (const [, body] of entries) {
+        const match = /<lastmod>(\d{4}-\d{2}-\d{2})<\/lastmod>/.exec(body);
+        assert.ok(match, body);
+        assert.strictEqual(new Date(match[1]).toISOString().slice(0, 10), match[1]);
+    }
+    return entries;
+}
+
 const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
 
 (async () => {
@@ -198,6 +209,18 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         const offers = await t.get('/sitemaps/offers.xml');
         const fresh = (await t.ctx.store.db.prepare("SELECT slug FROM deal_offers WHERE title = 'Hardcover novel'").get()).slug;
         assert.ok(offers.text.includes(fresh));
+        assertSitemapLastmods(offers.text);
+        const offerRow = await t.ctx.store.db.prepare('SELECT id, updated_at FROM deal_offers WHERE slug = ?').get(fresh);
+        const observation = await t.ctx.store.db.prepare('SELECT MAX(observed_at) AS time FROM deal_price_observations WHERE offer_id = ?').get(offerRow.id);
+        const expected = new Date(Math.max(offerRow.updated_at, observation.time || 0)).toISOString().slice(0, 10);
+        assert.ok(offers.text.includes(`<lastmod>${expected}</lastmod>`));
+        const products = (await t.get('/sitemaps/products.xml')).text;
+        assertSitemapLastmods(products);
+        // An index entry carries its map's newest lastmod; an empty map has no honest date and none is invented.
+        const offersEntry = /<sitemap><loc>[^<]*\/sitemaps\/offers\.xml<\/loc>(<lastmod>[^<]+<\/lastmod>)?<\/sitemap>/.exec(idx.text);
+        assert.ok(offersEntry && offersEntry[1], idx.text);
+        if (!products.includes('<url>')) assert.ok(/<loc>[^<]*\/sitemaps\/products\.xml<\/loc><\/sitemap>/.test(idx.text), 'no lastmod for an empty map');
+        else assertSitemapLastmods(idx.text, 'sitemap');
         assert.ok(!offers.text.includes(timed.slug), 'expired');
         assert.ok(!offers.text.includes(deal.slug), 'expired');
     });

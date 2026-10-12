@@ -70,6 +70,8 @@ records" obligation; a deviation from the nine-table list, see the final section
 | `GET /api/health`, `/api/ready`, `/release.json`, `/metrics` | operations (`/metrics` loopback only; nginx never proxies it) |
 | `/auth/*` | Network SSO (the same session layer as Community/Blog) |
 
+Sitemap entries carry lastmod from each offer or product page's latest recorded change.
+
 ### API (`/api/v1`, problem+json errors)
 
 Service tokens (audience `openvibe.deals`) are checked for **one capability per route** and act for
