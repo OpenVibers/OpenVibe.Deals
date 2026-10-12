@@ -38,7 +38,7 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     async function productEntries() {
         return Promise.all((await listings.products()).map(async (p) => {
             const pv = await publication.productView(p);
-            return { loc: abs(publication.productPath(p)), lastmod: pv.freshestObservedAt || undefined, decision: pv.decision };
+            return { loc: abs(publication.productPath(p)), lastmod: Math.max(p.updated_at, ...pv.offers.map((v) => Math.max(v.root.updated_at, v.latest ? v.latest.observed_at : 0))), decision: pv.decision };
         }));
     }
 
@@ -94,7 +94,7 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     });
 
     router.get('/sitemap.xml', async (_req, res) => {
-        const o = (await offerEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod);
+        const o = (await offerEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
         const p = (await productEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
         const iso = (list) => (list.length ? { lastmod: new Date(Math.max(...list)).toISOString() } : {});
         xml(res, seo.sitemapIndex([{ loc: abs('/sitemaps/offers.xml'), ...iso(o) }, { loc: abs('/sitemaps/products.xml'), ...iso(p) }]));
