@@ -8,12 +8,13 @@
  *   3. freshness         re-derive every offer's Search document; a price that went stale since the
  *                        last tick changes the document (freshness facet, noindex) and only then is
  *                        an event emitted (the sequencer makes unchanged documents no-ops)
- *   4. Sources           pull the deals change feed, then re-confirm imported offers going stale
+ *   4. Sources           pull the deals change feed, then re-confirm imported offers going stale, then the
+ *                        crowdfunding feed (domain/campaigns.js)
  *   5. housekeeping      prune old rate-limit windows
  *
  * Every step is idempotent, so a tick re-run after a crash changes nothing that already happened.
  */
-function createWorker({ config, store, offers, hotness, indexing, listings, importer, limits, log = console }) {
+function createWorker({ config, store, offers, hotness, indexing, listings, importer, campaigns = null, limits, log = console }) {
     let timer = null;
     let running = false;
     let lastError = null;
@@ -34,6 +35,7 @@ function createWorker({ config, store, offers, hotness, indexing, listings, impo
             summary.reindexed = reindexed;
             summary.import = await importer.pull();
             summary.refresh = await importer.refresh();
+            if (campaigns) summary.campaigns = await campaigns.pull();
             summary.pruned = await limits.prune();
             lastError = null;
         } catch (err) {

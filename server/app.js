@@ -90,6 +90,10 @@ async function createApp(opts = {}) {
     const votes = createVotes({ config, store, reads, hotness, limits, flags, people, outbox });
     const listings = createListings({ store });
     const importer = createImporter({ config, store, reads, catalog, offers, indexing, sources, log });
+    // Crowdfunding discovery (domain/campaigns.js): Sources' crowdfunding items through the same chassis, its own cursor.
+    const campaigns = require('./domain/campaigns').createCampaigns({
+        store, log, sources: config.sources.enabled ? createSourcesClient({ config: { ...config, sources: { ...config.sources, category: 'crowdfunding' } }, fetchImpl }) : null,
+    });
     const sso = opts.sso || createSsoClient({
         site: 'deals', baseUrl: config.baseUrl,
         clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
@@ -100,7 +104,7 @@ async function createApp(opts = {}) {
     const auth = opts.auth || sso;
     const jwksUrl = `${config.networkInternalUrl}/api/.well-known/jwks`;
     const viewers = createViewerResolver({ auth, config, people });
-    const worker = createWorker({ config, store, offers, hotness, indexing, listings, importer, limits, log });
+    const worker = createWorker({ config, store, offers, hotness, indexing, listings, importer, campaigns, limits, log });
 
     // Account export and deletion (ADR-033, domain/account-data.js), pushed to Network's internal routes with this service's
     // own client-credentials token; a test injects a stand-in through opts.accountSend.
@@ -109,7 +113,7 @@ async function createApp(opts = {}) {
         ? createNetworkSender({ networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl })
         : null);
 
-    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, auth, viewers, worker, indexnow, accountData, accountSend };
+    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, campaigns, auth, viewers, worker, indexnow, accountData, accountSend };
 
     const app = express();
     app.disable('x-powered-by');
@@ -194,6 +198,7 @@ async function createApp(opts = {}) {
     const pages = createPages(ctx);
     const formLimit = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
     app.use(['/submit', '/watches', '/mod', '/d/:slug/:action'], (req, res, next) => (req.method === 'POST' ? formLimit(req, res, next) : next()));
+    app.use(require('./http/crowdfunding').createCrowdfundingRoutes(ctx));
     app.use(pages.router);
     app.use((req, res) => pages.notFound(req, res));
 

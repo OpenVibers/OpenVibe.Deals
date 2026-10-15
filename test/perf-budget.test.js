@@ -19,7 +19,7 @@ const BUDGETS = {
     jsBrotliKB: 60,   // 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 2 (deals.css, openvibe-shared showcase.css)
     cssRawKB: 21,   // 19.0 with the deal cards
-    cssBrotliKB: 4.6,   // 4.1 (1.5 before showcase.css)
+    cssBrotliKB: 5,   // 4.7 with the crowdfunding rules (2026-10-15); 4.1 before (1.5 before showcase.css)
     externalFiles: 1,   // 0
 };
 

@@ -40,7 +40,7 @@ The nine charter tables live in Deals' own PostgreSQL database (`ov_deals` on th
 Companion tables (not charter tables): `deal_stores` (store records by domain — the plan's "store
 records" obligation; a deviation from the nine-table list, see the final section), `watch_notifications`
 (the (watch, observation) uniqueness), `moderation_log`, `rate_events`, `import_state`,
-`subject_projections`, the SDK's `event_outbox` / `idempotency_receipts`, and openvibe-publishing's
+`subject_projections`, `deal_campaigns` (crowdfunding discovery), the SDK's `event_outbox` / `idempotency_receipts`, and openvibe-publishing's
 `deal_offer_discussion_refs` and `deal_index_revisions`.
 
 Telemetry (openvibe-sdk 0.46, `platform.telemetry-sample@1`): requests are aggregated by route template, method and status class,
@@ -67,6 +67,7 @@ gauges to `telemetry_samples` every minute and on stop, and deletes rows older t
 | `GET /p/:slug` | a product: **price comparison** across its offers, each with its own latest observation and time (`.json` too) |
 | `GET /s/:domain` | a store's deals |
 | `GET /search?q=` | search (noindex), with "save this search" / "watch these words" |
+| `GET /crowdfunding?q=&sort=` | crowdfunding discovery: one search opens Kickstarter, Indiegogo, Crowd Supply, Ulule, GoFundMe, Open Collective, Patreon, Wefunder and StartEngine at the words (deep links, nothing read from them), and the campaigns Sources collected (Open Collective) by contributors, newest or most received, amounts "as of" their fetch. Indexable without words; a search is noindex. `/crowdfunding.json` is the same as data (CORS *). |
 | `GET/POST /submit` | submit a deal (signed in) |
 | `GET/POST /watches` | watches and saved searches; `POST /watches/:id/delete` |
 | `GET /mod` | moderators: open flags (incl. vote rings), text waiting for review, possible duplicates; `POST /mod/offers/:slug/(merge\|unmerge\|disable\|enable\|review\|expire)`, `POST /mod/flags/:id/(resolve\|dismiss)` |
@@ -242,6 +243,12 @@ Offers whose latest imported observation is getting old are re-confirmed from `G
 when Sources fetched them again. A removed item (takedown, licence) removes its source; an imported
 offer with no source left is disabled. Imported text is `review_state = pending` → `noindex` until a
 moderator records a review (a `usr_` subject; a service cannot review).
+
+The crowdfunding feed (`category=crowdfunding`, server/domain/campaigns.js) is pulled through the same chassis with its
+own cursor (`sources.crowdfunding.after` in `deals_ingest_cursor`) into `deal_campaigns` (migration
+`0005_crowdfunding.sql`), never into offers: name, summary, type, first tag, currency, the total received and yearly
+budget in cents and the contributor count, exactly as stated, with the time Sources fetched them. A removed item is
+deleted. Each campaign links to its page on its platform (Open Collective: `https://opencollective.com/<slug>`).
 
 ### Per-source policy: verbatim links, attribution and browser extensions
 
