@@ -23,6 +23,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const NAV_LINKS = [
     { label: 'Hot', href: '/' },
     { label: 'New', href: '/new' },
+    { label: 'Crowdfunding', href: '/crowdfunding' },
     { label: 'Submit', href: '/submit', icon: 'fa-plus' },
     { label: 'Watches', href: '/watches', icon: 'fa-bell' },
 ];

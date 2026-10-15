@@ -61,7 +61,7 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
             details: 'A price on this site is an observation: it has a source and an observed_at time, and it is only claimed "as of" that time. Offers whose latest observation is older than the freshness window are marked stale and are noindex; expired offers are noindex; a price nobody stated is shown as "not stated" and omitted from structured data (never 0). Every deal page has a JSON twin at <deal URL>.json with the full observation history, sources, votes and indexability reasons. Imported and AI-assisted text is noindex until a person reviews it.',
             sections: [
                 { title: 'Start here', links: [
-                    { title: 'Hot deals', url: abs('/') }, { title: 'New deals', url: abs('/new') }, { title: 'Sitemap', url: abs('/sitemap.xml') },
+                    { title: 'Hot deals', url: abs('/') }, { title: 'New deals', url: abs('/new') }, { title: 'Crowdfunding', url: abs('/crowdfunding'), note: 'one search across Kickstarter, Indiegogo, GoFundMe, Open Collective and more, and open-source campaigns with what they raised (/crowdfunding.json)' }, { title: 'Sitemap', url: abs('/sitemap.xml') },
                 ] },
                 { title: 'Feeds', links: [{ title: 'RSS', url: abs('/feed.xml') }, { title: 'Atom', url: abs('/atom.xml') }, { title: 'JSON Feed', url: abs('/feed.json') }] },
                 { title: 'Data', links: [

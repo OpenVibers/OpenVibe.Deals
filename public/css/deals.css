@@ -87,3 +87,13 @@ code { overflow-wrap: anywhere; }
 .page { max-width: 1080px; }
 .account-bar { max-width: 1080px; }
 .page .sc-hero, .page .sc-sec, .page .sc-cta { padding-left: 0; padding-right: 0; }
+/* Crowdfunding (server/http/crowdfunding.js) */
+.cf-search { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 8px; }
+.cf-search input { flex: 1 1 260px; width: auto; }
+.cf-search button { margin: 0; }
+.cf-groups, .cf-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.cf-grid { list-style: none; padding: 0; }
+.cf-group, .cf-campaign { margin: 0; }
+.cf-group h3, .cf-campaign h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.cf-links { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.cf-links .button { margin: 0; padding: 6px 12px; }
