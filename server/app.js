@@ -51,6 +51,8 @@ const cache = require('openvibe-shared/cache-policy');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VERSION = require('../package.json').version;
+const { createHttpTelemetry } = require('openvibe-sdk/service');
+const { createPgTelemetrySink } = require('openvibe-sdk/telemetry');
 
 /** opts: config, now (clock), fetchImpl, auth, log, limitsNow (the per-actor limiter's clock, tests) */
 async function createApp(opts = {}) {
@@ -116,6 +118,11 @@ async function createApp(opts = {}) {
     require('./render/layout').setRelease(release.release);
     const metrics = require('openvibe-shared/metrics').instrument(app, { service: 'deals', release: release.release });
     app.locals.metrics = metrics.registry;
+    // Request telemetry (openvibe-sdk/service, plan T1): one aggregated sample per route template, method and status
+    // class each flush, stored in this service's telemetry_samples table; /shared, health, readiness and /metrics make
+    // none. server/index.js flushes it every 15 s and on stop, and keeps the table to 30 days.
+    ctx.telemetry = createHttpTelemetry({ service: 'deals', sink: opts.telemetrySink || createPgTelemetrySink({ db: store.db, log }), skipPrefixes: ['/shared'] });
+    app.use(ctx.telemetry.middleware());
     app.locals.ctx = ctx;
     // Per-actor limits (http/actor-limits.js) for the API and the page forms, counted once each router
     // resolved req.viewer; the per-address limits below and the per-person abuse controls stay.
