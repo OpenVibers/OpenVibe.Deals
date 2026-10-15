@@ -43,6 +43,11 @@ records" obligation; a deviation from the nine-table list, see the final section
 `subject_projections`, the SDK's `event_outbox` / `idempotency_receipts`, and openvibe-publishing's
 `deal_offer_discussion_refs` and `deal_index_revisions`.
 
+Telemetry (openvibe-sdk 0.46, `platform.telemetry-sample@1`): requests are aggregated by route template, method and status class,
+never raw URL; `/shared`, static assets, health, readiness and `/metrics` are skipped. `server/app.js` builds `createHttpTelemetry`
+and mounts its middleware; `server/index.js` writes one `http.request` sample per key plus the active-requests, p95 and event-loop-lag
+gauges to `telemetry_samples` every minute and on stop, and deletes rows older than 14 days daily (`migrations/0004_telemetry.sql`).
+
 ## Does not own
 
 - coupon codes (OpenVibe.Coupons; cross-linked later, separate database)
