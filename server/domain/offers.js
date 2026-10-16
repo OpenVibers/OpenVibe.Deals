@@ -33,9 +33,9 @@ function createOffers(deps) {
     const q = {
         byUrl: db.prepare("SELECT * FROM deal_offers WHERE url_norm = ? AND status <> 'disabled' ORDER BY created_at LIMIT 1"),
         insertOffer: db.prepare(`INSERT INTO deal_offers (id, slug, title, description, url, url_norm, store_id, product_id, category, origin, submitted_by,
-                                     text_origin, review_state, ai_summary, status, expires_at, created_at, updated_at)
+                                     text_origin, review_state, ai_summary, status, expires_at, seller, created_at, updated_at)
                                  VALUES (@id, @slug, @title, @description, @url, @url_norm, @store_id, @product_id, @category, @origin, @submitted_by,
-                                     @text_origin, @review_state, @ai_summary, 'active', @expires_at, @now, @now)`),
+                                     @text_origin, @review_state, @ai_summary, 'active', @expires_at, @seller, @now, @now)`),
         insertSource: db.prepare(`INSERT INTO deal_offer_sources (id, offer_id, kind, ref_service, ref_type, ref_id, ref_part, ref_revision, source_key, url, label,
                                       license_note, submitted_by, retrieved_at, created_at, updated_at)
                                   VALUES (@id, @offer_id, @kind, @ref_service, @ref_type, @ref_id, @ref_part, @ref_revision, @source_key, @url, @label,
@@ -122,7 +122,7 @@ function createOffers(deps) {
             id, slug: slugify(f.title, id), title: f.title, description: f.description || null, url: f.url, url_norm: urlKey(f.url),
             store_id: f.store_id || null, product_id: f.product_id || null, category: f.category || null, origin: f.origin,
             submitted_by: f.submitted_by || null, text_origin: f.text_origin || 'human', review_state: f.review_state || 'not_required',
-            ai_summary: f.ai_summary || null, expires_at: f.expires_at == null ? null : f.expires_at, now: store.now(),
+            ai_summary: f.ai_summary || null, expires_at: f.expires_at == null ? null : f.expires_at, seller: f.seller || null, now: store.now(),
         });
         return await reads.get(id);
     }
@@ -181,7 +181,7 @@ function createOffers(deps) {
         const offer = await insertOffer({
             title: f.title, description: f.description, url: f.url, store_id: st ? st.id : null, product_id: f.product_id || null,
             category: f.category || null, origin: 'import', submitted_by: null, text_origin: 'imported', review_state: 'pending',
-            expires_at: f.expires_at == null ? null : f.expires_at,
+            expires_at: f.expires_at == null ? null : f.expires_at, seller: f.seller || null,
         });
         const src = await ensureSource(offer.id, source);
         await hotness.snapshot(offer.id, 'create');

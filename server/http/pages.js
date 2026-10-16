@@ -181,7 +181,7 @@ function createPages(ctx) {
         const canonical = publication.abs(publication.offerPath(r));
         send(req, res, 200, {
             title: r.title,
-            description: `${views.priceText(v.latest)}${v.latest ? ` as of ${views.when(v.latest.observed_at)}` : ''}${v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${r.description ? ` ${r.description.slice(0, 120)}` : ''}`,
+            description: `${views.priceText(v.latest)}${v.latest ? ` as of ${views.when(v.latest.observed_at)}` : ''}${r.seller ? ` at ${r.seller}` : v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${r.description ? ` ${r.description.slice(0, 120)}` : ''}`,
             decision: v.decision,
             canonical,
             type: 'website',
@@ -423,7 +423,7 @@ function createPages(ctx) {
             const via = v.attribution ? `Deal via ${v.attribution.text}` : null;
             return {
                 id: `deals:offer:${o.id}`, url: publication.abs(publication.offerPath(o)), title: o.title,
-                summary: `${via ? `${via}. ` : ''}${price}${v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${o.description ? ` ${o.description.slice(0, 300)}` : ''}`,
+                summary: `${via ? `${via}. ` : ''}${price}${v.root.seller ? ` at ${v.root.seller}` : v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${o.description ? ` ${o.description.slice(0, 300)}` : ''}`,
                 tags: via ? [via] : undefined,
                 published: o.created_at, updated: Math.max(o.updated_at, v.latest ? v.latest.observed_at : 0), decision: v.decision,
             };

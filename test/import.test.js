@@ -179,6 +179,35 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         assert.deepStrictEqual(normal.json().offer.attribution, { text: 'DealNews', url: 'https://www.dealnews.com/' });
     });
 
+    await check('a deal feed\'s stated price, retailer and end date (Sources feed@2): on the offer; the retailer never names the aggregator\'s store', async () => {
+        const link = 'https://www.dealnews.com/products/Vosser/Air-Mattress/508347.html?iref=rss';
+        const ends = t.clock.now() + 30 * 86400000;
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAB1', sourceKey: 'dealnews-daily', kind: 'article', title: 'Vosser Queen Air Mattress for $67 + free shipping', url: link,
+            fields: { categories: [], price: '67.00', currency: 'USD', seller: 'Amazon', valid_until: new Date(ends).toISOString() }, retrievedAt: t.clock.now() }));
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAB2', sourceKey: 'dealnews-daily', kind: 'article', title: 'Target sale', url: 'https://www.dealnews.com/target-sale/1.html',
+            fields: { seller: 'Target' }, retrievedAt: t.clock.now() }));
+        const s = await t.ctx.importer.pull();
+        assert.deepStrictEqual(s.outcomes, { created: 2 }, JSON.stringify(s));
+        const offer = await byUrl(link);
+        assert.strictEqual(offer.seller, 'Amazon');
+        assert.strictEqual(offer.expires_at, ends, 'the stated end date');
+        const json = await t.offerJson(offer.slug);
+        assert.deepStrictEqual([json.latest_observation.price, json.latest_observation.currency, json.seller, json.store.domain, json.store.name], ['67.00', 'USD', 'Amazon', 'dealnews.com', null],
+            'the price as stated; the store stays dealnews.com, unnamed (a retailer must not become the aggregator\'s name)');
+        const target = await byUrl('https://www.dealnews.com/target-sale/1.html');
+        assert.deepStrictEqual([target.seller, (await t.offerJson(target.slug)).latest_observation.price], ['Target', null], 'no stated price stays not stated');
+        const page = await t.get(`/d/${offer.slug}`);
+        assert.ok(page.text.includes('<dt>Sold by</dt><dd>Amazon') && page.text.includes('<dt>Link goes to</dt>'), 'the page says who sells it and where the link goes');
+        assert.ok((await t.get('/new')).text.includes('<span class="seller">at Amazon</span>'), 'the card names the seller');
+        assert.match((await t.get('/feed.xml')).text, /at Amazon\./);
+        // A later revision naming another retailer updates the offer's seller.
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAB2', sourceKey: 'dealnews-daily', kind: 'article', title: 'Target sale', url: 'https://www.dealnews.com/target-sale/1.html',
+            fields: { seller: 'Target.com', price: '10.00', currency: 'USD' }, revision: 2, retrievedAt: t.clock.now() + 1000 }));
+        await t.ctx.importer.pull();
+        const again = await byUrl('https://www.dealnews.com/target-sale/1.html');
+        assert.deepStrictEqual([again.seller, (await t.offerJson(again.slug)).latest_observation.price], ['Target.com', '10.00']);
+    });
+
     await check('Sources down: the pull fails honestly (readiness says so), keeps its cursor, invents nothing', async () => {
         const cursor = await t.ctx.importer.cursor();
         const offers = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get()).n;

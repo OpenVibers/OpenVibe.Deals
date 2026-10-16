@@ -109,6 +109,8 @@ function createPublication({ config, store, reads, catalog }) {
             disabled_reason: r.status === 'disabled' ? r.disabled_reason : null,
             created_at: iso(r.created_at), updated_at: iso(r.updated_at),
             store: v.store ? { id: v.store.id, domain: v.store.domain, name: v.store.name, url: abs(storePath(v.store)) } : null,
+            // The shop a source says sells it, as stated (the store is where the link goes).
+            seller: r.seller || null,
             product: v.product ? { id: v.product.id, slug: v.product.slug, name: v.product.name, url: abs(productPath(v.product)) } : null,
             // "latest", never "current": whether it still holds is what freshness says.
             latest_observation: v.latest ? observationDto(v.latest) : null,
@@ -135,7 +137,7 @@ function createPublication({ config, store, reads, catalog }) {
         const ld = {
             '@type': 'Offer',
             url: abs(offerPath(v.root)),
-            seller: v.store ? { '@type': 'Organization', name: v.store.name || v.store.domain } : undefined,
+            seller: v.root.seller ? { '@type': 'Organization', name: v.root.seller } : v.store ? { '@type': 'Organization', name: v.store.name || v.store.domain } : undefined,
         };
         if (fresh && o) {
             if (o.price != null && o.currency) { ld.price = o.price; ld.priceCurrency = o.currency; }
