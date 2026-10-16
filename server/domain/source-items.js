@@ -19,7 +19,12 @@
  *                 seller → store name
  *   kind product  a product (resolved by gtin / mpn / sku / name) and one offer per stated offer
  *   kind article  (RSS/Atom) one offer with the title and link; the price is NOT parsed out of the
- *                 headline — it stays "not stated" until a structured source or a person states it
+ *                 headline — it stays "not stated" until a structured source or a person states it. A deal
+ *                 feed's own offer elements (Sources feed@2: DealNews' price, currency, retailer and end date)
+ *                 are such a statement and map like an offer's fields.
+ *   seller        the shop the item names (fields.seller) is the offer's `seller`. It names the link's store
+ *                 too, except for a source whose links are kept verbatim (an aggregator linking its own pages:
+ *                 the store is the aggregator's domain, and the retailer must not become that store's name).
  *   other kinds   skipped
  *
  * A source policy (server/domain/source-policy.js) may require a source's links kept verbatim and
@@ -97,10 +102,14 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         // terms); every other source keeps today's normalisation.
         const verbatim = keepsLinksVerbatim(item.source_key);
         const linkOf = (raw) => (verbatim ? verbatimUrl(raw) : normalizeUrl(raw));
+        const sellerOf = (raw) => {
+            const seller = typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 120) : null;
+            return { seller, store_name: verbatim ? null : seller };
+        };
         if (item.kind === 'offer') {
             const url = linkOf(f.url || item.canonical_url);
             if (!url || !item.title) return [];
-            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), store_name: f.seller || null }];
+            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), ...sellerOf(f.seller) }];
         }
         if (item.kind === 'product') {
             if (!item.title) return [];
@@ -113,7 +122,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 out.push({
                     // A verbatim source's title is used as stated, with no added words.
                     part: urlKey(url), url, title: !verbatim && o.seller ? `${item.title} — ${o.seller}` : item.title, description: item.summary,
-                    obs: obsFields(o), expires_at: stated(o.valid_until), store_name: o.seller || null,
+                    obs: obsFields(o), expires_at: stated(o.valid_until), ...sellerOf(o.seller),
                     product: { name: item.title, brand: f.brand, gtin: f.gtin, mpn: f.mpn, sku: f.sku },
                 });
             }
@@ -122,7 +131,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         if (item.kind === 'article' || item.kind === 'record') {
             const url = linkOf(item.canonical_url);
             if (!url || !item.title) return [];
-            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields({}), expires_at: null, store_name: null }];
+            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), ...sellerOf(f.seller) }];
         }
         return [];
     }
@@ -171,6 +180,10 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 const obs = await offers.recordObservation(existing.offer_id, existing.id, c.obs, { origin, observedAt: retrievedAt, sourceRevision: item.revision });
                 const offer = await reads.get(existing.offer_id);
                 const changed = ['observation'];
+                if (origin === 'import' && c.seller && offer.origin === 'import' && c.seller !== offer.seller) {
+                    await db.prepare('UPDATE deal_offers SET seller = ?, updated_at = ? WHERE id = ?').run(c.seller, store.now(), offer.id);
+                    changed.push('seller');
+                }
                 if (origin === 'import' && c.expires_at && offer.status === 'active' && offer.origin === 'import' && c.expires_at !== offer.expires_at) {
                     await db.prepare('UPDATE deal_offers SET expires_at = ?, updated_at = ? WHERE id = ?').run(c.expires_at, store.now(), offer.id);
                     changed.push('expires_at');
@@ -192,6 +205,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 const s = await offers.ensureSource(dup.id, src);
                 const obs = await offers.recordObservation(dup.id, s.id, c.obs, { origin: 'import', observedAt: retrievedAt, sourceRevision: item.revision });
                 if (productId && !dup.product_id) await db.prepare('UPDATE deal_offers SET product_id = ?, updated_at = ? WHERE id = ?').run(productId, store.now(), dup.id);
+                if (c.seller && !dup.seller) await db.prepare('UPDATE deal_offers SET seller = ?, updated_at = ? WHERE id = ?').run(c.seller, store.now(), dup.id);
                 await indexing.emitOffer('deals.offer.updated', await reads.get(dup.id), { actor: 'svc:deals', extra: { changed: ['sources'], observation_id: obs.id } });
                 await indexing.reindex(await reads.get(dup.id));
                 outcomes.push('attached');
@@ -199,7 +213,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
             }
             await offers.createImported({
                 url: c.url, title: String(c.title).slice(0, 200), description: c.description, product_id: productId,
-                store_name: c.store_name, expires_at: c.expires_at != null && c.expires_at > store.now() ? c.expires_at : null,
+                store_name: c.store_name, seller: c.seller, expires_at: c.expires_at != null && c.expires_at > store.now() ? c.expires_at : null,
             }, src, c.obs, { observedAt: retrievedAt, sourceRevision: item.revision });
             outcomes.push('created');
         }

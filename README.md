@@ -140,7 +140,11 @@ two subscriptions are created at boot when missing (`startSubscriptions`, needs 
   facet, `noindex`) — only when it actually changed.
 - A price needs its currency: `10` without `USD` is refused (422), never completed. `$10` is refused
   (amounts are plain decimals). Imported values are copied as stated; a malformed one is `null`. A
-  price in an imported headline is **not** parsed out of the text.
+  price in an imported headline is **not** parsed out of the text. A deal feed that states its offers in its own
+  elements (Sources `feed@2`: DealNews' price with currency, retailer and end date) is a statement: the price is an
+  observation, the end date the stated end, and the retailer the offer's `seller` ("at Amazon" on cards, "Sold by" on
+  the page, `seller` in JSON and the Offer JSON-LD). The store stays the link's domain; a source whose links are kept
+  verbatim (an aggregator's own pages) never names that store after a retailer (migration `0006_offer_seller.sql`).
 - JSON-LD: `Product` with one `Offer` per offer; `price`/`priceCurrency` only from a fresh observation
   that stated both, `availability`/`itemCondition` only when stated, `validThrough` only from a stated
   end. Unknown fields are omitted, never 0 or `InStock`.

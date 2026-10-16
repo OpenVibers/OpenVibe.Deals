@@ -84,7 +84,7 @@ function offerCard(v, urls) {
 <h2 class="deal-title"><a href="${urls.offerPath(r)}">${r.title}</a> ${statusBadge(r)}</h2>
 ${latestLine(v)}
 ${attributionLine(v.attribution)}
-<p class="meta">${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}</p>
+<p class="meta">${r.seller ? html`<span class="seller">at ${r.seller}</span> · ` : ''}${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}</p>
 </div></li>`;
 }
 
@@ -176,7 +176,8 @@ ${r.description ? html`<section class="description">${raw(renderMarkdown(r.descr
 ${r.ai_summary ? html`<section class="disclosure"><p><strong>AI-assisted summary</strong>${r.review_state === 'reviewed' ? ' (reviewed by a person)' : ' (not yet reviewed by a person)'}</p><p>${r.ai_summary}</p></section>` : ''}
 ${r.review_state === 'pending' && r.text_origin === 'imported' ? html`<p class="disclosure">This deal was imported from a source and has not been reviewed by a person yet.</p>` : ''}
 <dl class="facts">
-<dt>Store</dt><dd>${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a>` : 'not stated'}</dd>
+${r.seller ? html`<dt>Sold by</dt><dd>${r.seller} <span class="meta">(as the source states it)</span></dd>` : ''}
+<dt>${r.seller ? 'Link goes to' : 'Store'}</dt><dd>${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a>` : 'not stated'}</dd>
 <dt>Product</dt><dd>${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a>` : 'not linked'}</dd>
 <dt>Posted</dt><dd>${timeEl(r.created_at)} ${r.origin === 'import' ? '(imported)' : '(by a member)'}</dd>
 </dl>
@@ -222,7 +223,7 @@ function productPage({ pv, urls }) {
     const p = pv.product;
     const rows = pv.offers.map((v) => html`<tr>
 <td><a href="${urls.offerPath(v.root)}">${v.root.title}</a> ${statusBadge(v.root)}${attributionLine(v.attribution)}</td>
-<td>${v.store ? v.store.name || v.store.domain : 'not stated'}</td>
+<td>${v.root.seller || (v.store ? v.store.name || v.store.domain : 'not stated')}</td>
 <td data-price="${v.latest && v.latest.price != null ? v.latest.price : ''}">${priceText(v.latest)}${v.latest && shippingText(v.latest) ? html` <span class="meta">${shippingText(v.latest)}</span>` : ''}</td>
 <td>${v.latest ? timeEl(v.latest.observed_at) : html`<span class="meta">never observed</span>`}</td>
 <td>${freshnessBadge(v.freshness, v.now)}</td>
