@@ -97,3 +97,5 @@ code { overflow-wrap: anywhere; }
 .cf-group h3, .cf-campaign h3 { margin: 0 0 4px; font-size: 1.05rem; }
 .cf-links { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .cf-links .button { margin: 0; padding: 6px 12px; }
+.seller-list { columns: 3 220px; padding-left: 1.1rem; }
+.seller-list li { margin: 4px 0; break-inside: avoid; }
