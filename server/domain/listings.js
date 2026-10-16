@@ -25,6 +25,10 @@ function createListings({ store }) {
         countActive: db.prepare("SELECT COUNT(*) AS n FROM deal_offers WHERE status = 'active' AND merged_into IS NULL"),
         byStore: db.prepare(`SELECT * FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
         countStore: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status <> 'disabled'`),
+        // Sellers: the shop a source names (migration 0006), as stated; a seller page lists by that exact name.
+        sellers: db.prepare(`SELECT seller, COUNT(*) AS n, MAX(created_at) AS latest FROM deal_offers WHERE seller IS NOT NULL AND merged_into IS NULL AND status <> 'disabled' GROUP BY seller ORDER BY n DESC, seller LIMIT 2000`),
+        bySeller: db.prepare(`SELECT * FROM deal_offers WHERE seller = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
+        countSeller: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE seller = ? AND merged_into IS NULL AND status <> 'disabled'`),
         indexable: db.prepare(`SELECT * FROM deal_offers WHERE merged_into IS NULL AND status <> 'disabled' ORDER BY created_at DESC LIMIT 50000`),
         products: db.prepare(`SELECT DISTINCT p.* FROM deal_products p JOIN deal_offers o ON o.product_id = p.id WHERE o.merged_into IS NULL AND o.status <> 'disabled' LIMIT 50000`),
         duplicates: db.prepare(`SELECT a.id AS a, b.id AS b FROM deal_offers a JOIN deal_offers b
@@ -55,6 +59,9 @@ function createListings({ store }) {
         countActive: async () => (await q.countActive.get()).n,
         byStore: async (storeId, limit, offset) => await q.byStore.all(storeId, limit, offset),
         countStore: async (storeId) => (await q.countStore.get(storeId)).n,
+        sellers: async () => (await q.sellers.all()).map((r) => ({ seller: r.seller, slug: sellerSlug(r.seller), count: Number(r.n), latest: r.latest })),
+        bySeller: async (seller, limit, offset) => await q.bySeller.all(seller, limit, offset),
+        countSeller: async (seller) => (await q.countSeller.get(seller)).n,
         indexable: async () => await q.indexable.all(),
         products: async () => await q.products.all(),
         possibleDuplicates: async (limit = 50) => await q.duplicates.all(limit),
@@ -63,4 +70,7 @@ function createListings({ store }) {
     };
 }
 
-module.exports = { createListings };
+/** "Best Buy" → "best-buy", "Target.com" → "target-com": a seller's address under /at/. */
+const sellerSlug = (name) => String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+
+module.exports = { createListings, sellerSlug };

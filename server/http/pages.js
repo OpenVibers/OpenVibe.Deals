@@ -41,7 +41,7 @@ function createPages(ctx) {
     // Per-actor limits on the forms (http/actor-limits.js), before the form is read: each shares its budget
     // with the API route that does the same thing. Reading pages is left to the per-address limits.
     const B = (name) => actorLimits.budget(name);
-    const urls = { offerPath: publication.offerPath, productPath: publication.productPath, storePath: publication.storePath };
+    const urls = { offerPath: publication.offerPath, productPath: publication.productPath, storePath: publication.storePath, sellerPath: publication.sellerPath };
     const form = express.urlencoded({ extended: false, limit: '32kb' });
     const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -293,6 +293,32 @@ function createPages(ctx) {
             title: `Deals at ${st.name || st.domain}`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             body: views.storePage({ st, views: list, pager, urls }),
+        }, { cacheable: true });
+    }));
+
+    // ── shops (the seller a source names, migration 0006) ──
+    router.get('/at', wrap(async (req, res) => {
+        const sellers = await listings.sellers();
+        send(req, res, 200, {
+            title: 'Deals by shop', decision: pageDecision('/at', { empty: sellers.length === 0 }), canonical: seo.canonicalUrl(config.baseUrl, '/at'),
+            body: views.sellersPage({ sellers }),
+        }, { cacheable: true });
+    }));
+    router.get('/at/:seller', wrap(async (req, res) => {
+        const want = String(req.params.seller || '').toLowerCase();
+        const hit = /^[a-z0-9-]{1,80}$/.test(want) ? (await listings.sellers()).find((x) => x.slug === want) : null;
+        if (!hit) return notFound(req, res);
+        const path = `/at/${hit.slug}`;
+        const total = await listings.countSeller(hit.seller);
+        const pager = ssr.paginate({ page: pageNumber(req), perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
+        if (pager.outOfRange && total) return notFound(req, res);
+        const list = await Promise.all((await listings.bySeller(hit.seller, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
+        const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
+        send(req, res, 200, {
+            title: `Deals at ${hit.seller}`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
+            description: `${total} deal${total === 1 ? '' : 's'} at ${hit.seller}, each with its source, price and when it was seen.`,
+            prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
+            body: views.sellerPage({ seller: hit.seller, views: list, pager, urls, total }),
         }, { cacheable: true });
     }));
 

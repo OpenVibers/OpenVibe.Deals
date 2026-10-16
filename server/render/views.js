@@ -84,7 +84,7 @@ function offerCard(v, urls) {
 <h2 class="deal-title"><a href="${urls.offerPath(r)}">${r.title}</a> ${statusBadge(r)}</h2>
 ${latestLine(v)}
 ${attributionLine(v.attribution)}
-<p class="meta">${r.seller ? html`<span class="seller">at ${r.seller}</span> · ` : ''}${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}</p>
+<p class="meta">${r.seller ? html`<a class="seller" href="${urls.sellerPath ? urls.sellerPath(r.seller) : '#'}">at ${r.seller}</a> · ` : ''}${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}</p>
 </div></li>`;
 }
 
@@ -176,7 +176,7 @@ ${r.description ? html`<section class="description">${raw(renderMarkdown(r.descr
 ${r.ai_summary ? html`<section class="disclosure"><p><strong>AI-assisted summary</strong>${r.review_state === 'reviewed' ? ' (reviewed by a person)' : ' (not yet reviewed by a person)'}</p><p>${r.ai_summary}</p></section>` : ''}
 ${r.review_state === 'pending' && r.text_origin === 'imported' ? html`<p class="disclosure">This deal was imported from a source and has not been reviewed by a person yet.</p>` : ''}
 <dl class="facts">
-${r.seller ? html`<dt>Sold by</dt><dd>${r.seller} <span class="meta">(as the source states it)</span></dd>` : ''}
+${r.seller ? html`<dt>Sold by</dt><dd>${urls.sellerPath ? html`<a href="${urls.sellerPath(r.seller)}">${r.seller}</a>` : r.seller} <span class="meta">(as the source states it)</span></dd>` : ''}
 <dt>${r.seller ? 'Link goes to' : 'Store'}</dt><dd>${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a>` : 'not stated'}</dd>
 <dt>Product</dt><dd>${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a>` : 'not linked'}</dd>
 <dt>Posted</dt><dd>${timeEl(r.created_at)} ${r.origin === 'import' ? '(imported)' : '(by a member)'}</dd>
@@ -313,8 +313,25 @@ ${views.length ? html`<ol class="deal-list">${views.map((v) => offerCard(v, urls
 ${raw(pager ? paginationHtml(pager) : '')}`;
 }
 
+/** /at/:seller: deals at one shop, as their sources name it. */
+function sellerPage({ seller, views: list, pager, urls, total }) {
+    return html`${raw(breadcrumbsHtml([{ name: 'Deals', url: '/' }, { name: 'Shops', url: '/at' }, { name: seller }]))}
+<h1>Deals at ${seller}</h1>
+<p class="lede">${total} deal${total === 1 ? '' : 's'} at ${seller}, as the deal sources name the shop, newest first.</p>
+${list.length ? html`<ol class="deal-list">${list.map((v) => offerCard(v, urls))}</ol>` : html`<p class="empty">No deals at this shop right now.</p>`}
+${raw(pager ? paginationHtml(pager) : '')}`;
+}
+
+/** /at: every shop with deals here, most deals first. */
+function sellersPage({ sellers }) {
+    return html`${raw(breadcrumbsHtml([{ name: 'Deals', url: '/' }, { name: 'Shops' }]))}
+<h1>Deals by shop</h1>
+<p class="lede">Every shop with a deal here, as the deal sources name it, the most deals first.</p>
+${sellers.length ? html`<ul class="seller-list">${sellers.map((x) => html`<li><a href="/at/${x.slug}">${x.seller}</a> <span class="meta">${x.count} deal${x.count === 1 ? '' : 's'}</span></li>`)}</ul>` : html`<p class="empty">No shops yet.</p>`}`;
+}
+
 function message({ heading, text, action }) {
     return html`<h1>${heading}</h1><p>${text}</p>${action ? html`<p><a href="${action.href}">${action.label}</a></p>` : ''}`;
 }
 
-module.exports = { dealsShowcase, offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, message, priceText, when };
+module.exports = { dealsShowcase, offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, sellerPage, sellersPage, message, priceText, when };

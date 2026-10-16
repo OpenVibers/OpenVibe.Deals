@@ -27,6 +27,7 @@ function createPublication({ config, store, reads, catalog }) {
     const offerPath = (o) => `/d/${encodeURIComponent(o.slug)}`;
     const productPath = (p) => `/p/${encodeURIComponent(p.slug)}`;
     const storePath = (s) => `/s/${encodeURIComponent(s.domain)}`;
+    const sellerPath = (name) => `/at/${require('./listings').sellerSlug(name)}`;
 
     function freshness(obs, now = store.now()) {
         if (!obs) return { state: 'unobserved', observed_at: null, age_ms: null, max_age_ms: config.freshnessMs };
@@ -189,7 +190,7 @@ function createPublication({ config, store, reads, catalog }) {
         });
     }
 
-    return { abs, offerPath, productPath, storePath, freshness, decideOffer, decideProduct, offerView, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd };
+    return { abs, offerPath, productPath, storePath, sellerPath, freshness, decideOffer, decideProduct, offerView, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd };
 }
 
 module.exports = { createPublication };

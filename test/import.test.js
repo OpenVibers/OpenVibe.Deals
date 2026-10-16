@@ -197,8 +197,8 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         const target = await byUrl('https://www.dealnews.com/target-sale/1.html');
         assert.deepStrictEqual([target.seller, (await t.offerJson(target.slug)).latest_observation.price], ['Target', null], 'no stated price stays not stated');
         const page = await t.get(`/d/${offer.slug}`);
-        assert.ok(page.text.includes('<dt>Sold by</dt><dd>Amazon') && page.text.includes('<dt>Link goes to</dt>'), 'the page says who sells it and where the link goes');
-        assert.ok((await t.get('/new')).text.includes('<span class="seller">at Amazon</span>'), 'the card names the seller');
+        assert.ok(page.text.includes('<dt>Sold by</dt><dd><a href="/at/amazon">Amazon</a>') && page.text.includes('<dt>Link goes to</dt>'), 'the page says who sells it and where the link goes');
+        assert.ok((await t.get('/new')).text.includes('>at Amazon</a>'), 'the card names the seller');
         assert.match((await t.get('/feed.xml')).text, /at Amazon\./);
         // A later revision naming another retailer updates the offer's seller.
         t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAB2', sourceKey: 'dealnews-daily', kind: 'article', title: 'Target sale', url: 'https://www.dealnews.com/target-sale/1.html',
@@ -206,6 +206,19 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         await t.ctx.importer.pull();
         const again = await byUrl('https://www.dealnews.com/target-sale/1.html');
         assert.deepStrictEqual([again.seller, (await t.offerJson(again.slug)).latest_observation.price], ['Target.com', '10.00']);
+    });
+
+    await check('shops: /at lists every seller with its count, /at/<seller> its deals; cards and pages link there', async () => {
+        const all = await t.get('/at');
+        assert.strictEqual(all.status, 200);
+        assert.ok(all.text.includes('<a href="/at/amazon">Amazon</a>') && all.text.includes('<a href="/at/target-com">Target.com</a>'));
+        const amazon = await t.get('/at/amazon');
+        assert.strictEqual(amazon.status, 200);
+        assert.ok(amazon.text.includes('<h1>Deals at Amazon</h1>') && amazon.text.includes('Vosser Queen Air Mattress'));
+        assert.ok(!amazon.text.includes('Target sale'), 'only that seller');
+        assert.ok((await t.get('/new')).text.includes('<a class="seller" href="/at/amazon">at Amazon</a>'), 'the card links the shop');
+        assert.strictEqual((await t.get('/at/nobody')).status, 404);
+        assert.strictEqual((await t.get('/at/..%2Fadmin')).status, 404);
     });
 
     await check('Sources down: the pull fails honestly (readiness says so), keeps its cursor, invents nothing', async () => {

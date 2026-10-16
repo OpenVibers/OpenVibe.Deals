@@ -145,6 +145,8 @@ two subscriptions are created at boot when missing (`startSubscriptions`, needs 
   observation, the end date the stated end, and the retailer the offer's `seller` ("at Amazon" on cards, "Sold by" on
   the page, `seller` in JSON and the Offer JSON-LD). The store stays the link's domain; a source whose links are kept
   verbatim (an aggregator's own pages) never names that store after a retailer (migration `0006_offer_seller.sql`).
+  **Shops:** `/at` lists every seller with its count and `/at/<seller>` its deals (newest first, paginated); the
+  "at Amazon" on a card and "Sold by" on a page link there. Like store pages, they are not in the sitemap.
 - JSON-LD: `Product` with one `Offer` per offer; `price`/`priceCurrency` only from a fresh observation
   that stated both, `availability`/`itemCondition` only when stated, `validThrough` only from a stated
   end. Unknown fields are omitted, never 0 or `InStock`.
