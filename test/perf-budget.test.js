@@ -12,14 +12,14 @@ const { spawn } = require('child_process');
 const { measure, check, format } = require('openvibe-shared/perf-budget');
 
 const BUDGETS = {
-    htmlRawKB: 25,   // measured 23.5 (fresh database, 2026-10-07; 17.2 before the showcase hero and features)
-    htmlBrotliKB: 6.5,   // 6.0 (4.5 before the showcase)
+    htmlRawKB: 32,   // 29.1 with the curated front page's search, questions (FAQ + JSON-LD) and closing call (2026-10-22); 23.5 before
+    htmlBrotliKB: 8,   // 7.1 with the curated front page (6.0 before; 4.5 before the showcase)
     jsFiles: 5,   // 5 (openvibe-shared 2.10's shell adds web-runtime.js)
     jsRawKB: 250,   // 239.1 (212.2 before web-runtime.js)
     jsBrotliKB: 60,   // 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 2 (deals.css, openvibe-shared showcase.css)
-    cssRawKB: 21,   // 19.0 with the deal cards
-    cssBrotliKB: 5,   // 4.7 with the crowdfunding rules (2026-10-15); 4.1 before (1.5 before showcase.css)
+    cssRawKB: 26,   // 24.2 with the front page's stats, cards, chips and questions (19.0 before)
+    cssBrotliKB: 6,   // 5.4 with the front page (2026-10-22); 4.7 with the crowdfunding rules; 1.5 before showcase.css
     externalFiles: 1,   // 0
 };
 

@@ -18,11 +18,12 @@ const frame = require('openvibe-shared/frame');
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.Deals';
 // One site summary, shared by /llms.txt, /llms-full.txt and the home page's ai-summary.
-const SITE_SUMMARY = 'Deals submitted and voted on by the OpenVibe community or imported from registered sources, with the source and observation time of every price.';
+const SITE_SUMMARY = 'Deals from DealNews and the OpenVibe community, by shop, category and end date, with price watches and crowdfunding search; every price has its source and the time it was seen.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const NAV_LINKS = [
-    { label: 'Hot', href: '/' },
+    { label: 'Hot', href: '/hot' },
     { label: 'New', href: '/new' },
+    { label: 'Categories', href: '/c' },
     { label: 'Shops', href: '/at' },
     { label: 'Crowdfunding', href: '/crowdfunding' },
     { label: 'Submit', href: '/submit', icon: 'fa-plus' },

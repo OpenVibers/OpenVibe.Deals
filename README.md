@@ -62,7 +62,9 @@ gauges to `telemetry_samples` every minute and on stop, and deletes rows older t
 
 | Route | What it is |
 |---|---|
-| `GET /`, `GET /new` | hot deals (latest `hot@1` snapshots) and newest deals; each card shows the latest price **as of** its time with a fresh/stale badge |
+| `GET /` | the front page (`server/render/home.js`): a search, the site's numbers (active deals, shops, prices seen in 24 hours, ending this week, categories, crowdfunding campaigns), then editors' picks, hot (voted up), just in, ending soon, under $20 (a fresh stated price), categories, shops and crowdfunding, how it works and questions (FAQPage JSON-LD). A deal shows once; a section with nothing to show is left out. `/?page=N` moved to `/hot?page=N` (301). |
+| `GET /hot`, `GET /new`, `GET /ending`, `GET /picks` | hot deals (latest `hot@1` snapshots), newest deals, deals whose stated end is in the next 7 days (soonest first) and a source's editors' picks; each card shows the latest price **as of** its time with a fresh/stale badge |
+| `GET /c`, `GET /c/:category` | deals by category, as each deal's source names it (DealNews' `dealnews:category`, Sources feed@3; migration 0007) |
 | `GET /d/:slug` | an offer: latest observation "as of", freshness, stated end (or "not stated"), votes and hotness with the formula, description (safe Markdown), AI/import disclosure, **price history table** (every observation, newest first, with its source), sources, merged listings, discussion. Forms: vote, report what the page says now, report a problem, mark expired (submitter), moderation. `…/:slug.json` is the same facts as data. A merged listing answers 301 to its canonical offer; a disabled one 410. |
 | `GET /p/:slug` | a product: **price comparison** across its offers, each with its own latest observation and time (`.json` too) |
 | `GET /s/:domain` | a store's deals |
@@ -72,7 +74,7 @@ gauges to `telemetry_samples` every minute and on stop, and deletes rows older t
 | `GET/POST /watches` | watches and saved searches; `POST /watches/:id/delete` |
 | `GET /mod` | moderators: open flags (incl. vote rings), text waiting for review, possible duplicates; `POST /mod/offers/:slug/(merge\|unmerge\|disable\|enable\|review\|expire)`, `POST /mod/flags/:id/(resolve\|dismiss)` |
 | `GET /feed.xml`, `/atom.xml`, `/feed.json` | newest active deals, with "as of" times and stable ids `deals:offer:<id>` |
-| `GET /robots.txt`, `/llms.txt`, `/sitemap.xml`, `/sitemaps/offers.xml`, `/sitemaps/products.xml` | discovery (below) |
+| `GET /robots.txt`, `/llms.txt`, `/sitemap.xml`, `/sitemaps/pages.xml`, `/sitemaps/offers.xml`, `/sitemaps/products.xml` | discovery (below); `pages.xml` lists the front page and every list (hot, new, ending, picks, each category and shop, crowdfunding) while it has deals |
 | `GET /api/health`, `/api/ready`, `/release.json`, `/metrics` | operations (`/metrics` loopback only; nginx never proxies it) |
 | `/auth/*` | Network SSO (the same session layer as Community/Blog) |
 

@@ -12,6 +12,8 @@
  *                               expired, reviewed where review is needed); lastmod = the latest
  *                               observation or edit, never "now"
  *   GET /sitemaps/products.xml  product pages with at least one fresh offer
+ *   GET /sitemaps/pages.xml     the front page and the lists: hot, new, ending soon, picks, every category and shop,
+ *                               crowdfunding (an empty list is noindex and left out)
  *
  * Built from the database on every request, never from the viewer. Stale, expired, disabled,
  * merged and unreviewed offers never appear.
@@ -42,6 +44,27 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
         }));
     }
 
+    /** The lists a person browses (all indexable while they have something to show); lastmod = their newest deal. */
+    async function pageEntries() {
+        const decide = (path, empty) => seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: abs(path), wordCount: 0, noindex: empty }, { policy: { minWords: 0 }, now: store.now() });
+        const newest = (await listings.newest(1, 0))[0];
+        const active = await listings.countActive();
+        const now = store.now();
+        const lists = [
+            { path: '/', empty: active === 0, lastmod: newest && newest.created_at },
+            { path: '/hot', empty: active === 0, lastmod: newest && newest.created_at },
+            { path: '/new', empty: active === 0, lastmod: newest && newest.created_at },
+            { path: '/ending', empty: (await listings.countEnding(now, now + 7 * 86400000)) === 0 },
+            { path: '/picks', empty: (await listings.countPicks()) === 0 },
+            { path: '/crowdfunding', empty: false },
+        ];
+        const categories = await listings.categories();
+        const sellers = await listings.sellers();
+        lists.push({ path: '/c', empty: categories.length === 0 }, ...categories.map((c) => ({ path: `/c/${c.slug}`, empty: c.count === 0, lastmod: c.latest })));
+        lists.push({ path: '/at', empty: sellers.length === 0 }, ...sellers.map((x) => ({ path: `/at/${x.slug}`, empty: x.count === 0, lastmod: x.latest == null ? null : Number(x.latest) })));
+        return lists.map((l) => ({ loc: abs(l.path), lastmod: l.lastmod || null, decision: decide(l.path, l.empty) }));
+    }
+
     router.get('/robots.txt', (_req, res) => {
         const body = [
             '# openvibe.deals automated-consumer policy: search engines and AI crawlers are welcome to read',
@@ -61,7 +84,9 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
             details: 'A price on this site is an observation: it has a source and an observed_at time, and it is only claimed "as of" that time. Offers whose latest observation is older than the freshness window are marked stale and are noindex; expired offers are noindex; a price nobody stated is shown as "not stated" and omitted from structured data (never 0). Every deal page has a JSON twin at <deal URL>.json with the full observation history, sources, votes and indexability reasons. Imported and AI-assisted text is noindex until a person reviews it.',
             sections: [
                 { title: 'Start here', links: [
-                    { title: 'Hot deals', url: abs('/') }, { title: 'New deals', url: abs('/new') }, { title: 'Crowdfunding', url: abs('/crowdfunding'), note: 'one search across Kickstarter, Indiegogo, GoFundMe, Open Collective and more, and open-source campaigns with what they raised (/crowdfunding.json)' }, { title: 'Sitemap', url: abs('/sitemap.xml') },
+                    { title: 'Front page', url: abs('/'), note: 'editors\' picks, newest, ending soon, under $20, categories, shops and crowdfunding' },
+                    { title: 'Hot deals', url: abs('/hot') }, { title: 'New deals', url: abs('/new') }, { title: 'Ending soon', url: abs('/ending') },
+                    { title: 'Editors\' picks', url: abs('/picks') }, { title: 'Categories', url: abs('/c') }, { title: 'Shops', url: abs('/at') }, { title: 'Crowdfunding', url: abs('/crowdfunding'), note: 'one search across Kickstarter, Indiegogo, GoFundMe, Open Collective and more, and open-source campaigns with what they raised (/crowdfunding.json)' }, { title: 'Sitemap', url: abs('/sitemap.xml') },
                 ] },
                 { title: 'Feeds', links: [{ title: 'RSS', url: abs('/feed.xml') }, { title: 'Atom', url: abs('/atom.xml') }, { title: 'JSON Feed', url: abs('/feed.json') }] },
                 { title: 'Data', links: [
@@ -96,9 +121,12 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     router.get('/sitemap.xml', async (_req, res) => {
         const o = (await offerEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
         const p = (await productEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
+        const g = (await pageEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
         const iso = (list) => (list.length ? { lastmod: new Date(Math.max(...list)).toISOString() } : {});
-        xml(res, seo.sitemapIndex([{ loc: abs('/sitemaps/offers.xml'), ...iso(o) }, { loc: abs('/sitemaps/products.xml'), ...iso(p) }]));
+        xml(res, seo.sitemapIndex([{ loc: abs('/sitemaps/pages.xml'), ...iso(g) }, { loc: abs('/sitemaps/offers.xml'), ...iso(o) }, { loc: abs('/sitemaps/products.xml'), ...iso(p) }]));
     });
+
+    router.get('/sitemaps/pages.xml', async (_req, res) => xml(res, seo.sitemap(await pageEntries()).files[0]));
 
     router.get('/sitemaps/offers.xml', async (_req, res) => xml(res, seo.sitemap(await offerEntries()).files[0]));
     router.get('/sitemaps/products.xml', async (_req, res) => xml(res, seo.sitemap(await productEntries()).files[0]));

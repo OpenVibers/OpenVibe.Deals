@@ -25,6 +25,9 @@
  *   seller        the shop the item names (fields.seller) is the offer's `seller`. It names the link's store
  *                 too, except for a source whose links are kept verbatim (an aggregator linking its own pages:
  *                 the store is the aggregator's domain, and the retailer must not become that store's name).
+ *   category      the item's first stated category (fields.categories[0], e.g. DealNews' "TVs") is the offer's
+ *                 category, as stated; staff_pick (fields.staff_pick, true/false) says whether the source's
+ *                 editors picked it (migration 0007). Neither is ever guessed.
  *   other kinds   skipped
  *
  * A source policy (server/domain/source-policy.js) may require a source's links kept verbatim and
@@ -106,10 +109,13 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
             const seller = typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 120) : null;
             return { seller, store_name: verbatim ? null : seller };
         };
+        // The source's own labels for the item, as stated (feed@3): its first category and its editors' pick.
+        const first = Array.isArray(f.categories) ? f.categories.find((c) => typeof c === 'string' && c.trim()) : null;
+        const labels = { category: first ? first.trim().replace(/\s+/g, ' ').slice(0, 60) : null, staff_pick: typeof f.staff_pick === 'boolean' ? f.staff_pick : null };
         if (item.kind === 'offer') {
             const url = linkOf(f.url || item.canonical_url);
             if (!url || !item.title) return [];
-            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), ...sellerOf(f.seller) }];
+            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), ...sellerOf(f.seller), ...labels }];
         }
         if (item.kind === 'product') {
             if (!item.title) return [];
@@ -122,7 +128,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 out.push({
                     // A verbatim source's title is used as stated, with no added words.
                     part: urlKey(url), url, title: !verbatim && o.seller ? `${item.title} — ${o.seller}` : item.title, description: item.summary,
-                    obs: obsFields(o), expires_at: stated(o.valid_until), ...sellerOf(o.seller),
+                    obs: obsFields(o), expires_at: stated(o.valid_until), ...sellerOf(o.seller), ...labels,
                     product: { name: item.title, brand: f.brand, gtin: f.gtin, mpn: f.mpn, sku: f.sku },
                 });
             }
@@ -131,7 +137,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         if (item.kind === 'article' || item.kind === 'record') {
             const url = linkOf(item.canonical_url);
             if (!url || !item.title) return [];
-            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), ...sellerOf(f.seller) }];
+            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), ...sellerOf(f.seller), ...labels }];
         }
         return [];
     }
@@ -154,6 +160,15 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
             await indexing.reindex(after);
         }
         return touched.length ? 'removed' : 'removed:unknown';
+    }
+
+    /** A source's stated category / editors' pick onto an offer, when they differ. → the names of what changed. */
+    async function applyLabels(offer, c) {
+        const category = c.category && c.category !== offer.category ? c.category : null;
+        const pick = c.staff_pick != null && c.staff_pick !== offer.staff_pick ? c.staff_pick : null;
+        if (category == null && pick == null) return [];
+        await db.prepare('UPDATE deal_offers SET category = COALESCE(?, category), staff_pick = COALESCE(?, staff_pick), updated_at = ? WHERE id = ?').run(category, pick, store.now(), offer.id);
+        return [...(category != null ? ['category'] : []), ...(pick != null ? ['staff_pick'] : [])];
     }
 
     /** One item, inside the caller's transaction (the chassis' per-item savepoint). */
@@ -188,6 +203,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                     await db.prepare('UPDATE deal_offers SET expires_at = ?, updated_at = ? WHERE id = ?').run(c.expires_at, store.now(), offer.id);
                     changed.push('expires_at');
                 }
+                if (origin === 'import' && offer.origin === 'import') changed.push(...await applyLabels(offer, c));
                 // Anything else the observation moved on the offer (price, product) is named too, so consumers never miss a field.
                 const after = await reads.get(offer.id);
                 for (const k of ['product_id', 'title', 'status']) if (after && offer && after[k] !== offer[k] && !changed.includes(k)) changed.push(k);
@@ -206,15 +222,17 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 const obs = await offers.recordObservation(dup.id, s.id, c.obs, { origin: 'import', observedAt: retrievedAt, sourceRevision: item.revision });
                 if (productId && !dup.product_id) await db.prepare('UPDATE deal_offers SET product_id = ?, updated_at = ? WHERE id = ?').run(productId, store.now(), dup.id);
                 if (c.seller && !dup.seller) await db.prepare('UPDATE deal_offers SET seller = ?, updated_at = ? WHERE id = ?').run(c.seller, store.now(), dup.id);
+                if (!dup.category || dup.staff_pick == null) await applyLabels(dup, { category: dup.category ? null : c.category, staff_pick: dup.staff_pick == null ? c.staff_pick : null });
                 await indexing.emitOffer('deals.offer.updated', await reads.get(dup.id), { actor: 'svc:deals', extra: { changed: ['sources'], observation_id: obs.id } });
                 await indexing.reindex(await reads.get(dup.id));
                 outcomes.push('attached');
                 continue;
             }
-            await offers.createImported({
-                url: c.url, title: String(c.title).slice(0, 200), description: c.description, product_id: productId,
+            const made = await offers.createImported({
+                url: c.url, title: String(c.title).slice(0, 200), description: c.description, product_id: productId, category: c.category,
                 store_name: c.store_name, seller: c.seller, expires_at: c.expires_at != null && c.expires_at > store.now() ? c.expires_at : null,
             }, src, c.obs, { observedAt: retrievedAt, sourceRevision: item.revision });
+            if (c.staff_pick != null) await applyLabels(made, { staff_pick: c.staff_pick });
             outcomes.push('created');
         }
         return outcomes.join(',');

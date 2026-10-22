@@ -28,6 +28,7 @@ function createPublication({ config, store, reads, catalog }) {
     const productPath = (p) => `/p/${encodeURIComponent(p.slug)}`;
     const storePath = (s) => `/s/${encodeURIComponent(s.domain)}`;
     const sellerPath = (name) => `/at/${require('./listings').sellerSlug(name)}`;
+    const categoryPath = (name) => `/c/${require('./listings').sellerSlug(name)}`;
 
     function freshness(obs, now = store.now()) {
         if (!obs) return { state: 'unobserved', observed_at: null, age_ms: null, max_age_ms: config.freshnessMs };
@@ -87,6 +88,17 @@ function createPublication({ config, store, reads, catalog }) {
             decision: decideOffer(root, latest, now),
             now,
         };
+    }
+
+    /**
+     * The little a card needs (the home page's sections): the group's latest observation, its freshness, the store and
+     * the attribution a source requires. Four reads instead of offerView's ten, so a page of 40 cards stays quick.
+     */
+    async function cardView(offer, now = store.now()) {
+        const root = offer.merged_into ? await reads.root(offer) : offer;
+        const ids = await reads.groupIds(root.id);
+        const latest = await reads.latestObservation(ids);
+        return { root, ids, store: await catalog.store(root.store_id), latest, freshness: freshness(latest, now), attribution: attributionOf(await reads.sources(ids)), now };
     }
 
     function observationDto(o) {
@@ -190,7 +202,7 @@ function createPublication({ config, store, reads, catalog }) {
         });
     }
 
-    return { abs, offerPath, productPath, storePath, sellerPath, freshness, decideOffer, decideProduct, offerView, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd };
+    return { abs, offerPath, productPath, storePath, sellerPath, categoryPath, freshness, decideOffer, decideProduct, offerView, cardView, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd };
 }
 
 module.exports = { createPublication };

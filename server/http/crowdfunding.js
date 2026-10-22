@@ -117,4 +117,4 @@ function createCrowdfundingRoutes(ctx) {
     return router;
 }
 
-module.exports = { createCrowdfundingRoutes };
+module.exports = { createCrowdfundingRoutes, campaignCard };

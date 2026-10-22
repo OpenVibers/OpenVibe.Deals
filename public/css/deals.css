@@ -99,3 +99,48 @@ code { overflow-wrap: anywhere; }
 .cf-links .button { margin: 0; padding: 6px 12px; }
 .seller-list { columns: 3 220px; padding-left: 1.1rem; }
 .seller-list li { margin: 4px 0; break-inside: avoid; }
+/* The front page (server/render/home.js): stats beside the hero, then sections of deal cards, chips and questions. */
+.hm-hero { padding-top: 32px; }
+.hm-search { display: flex; gap: 8px; margin-top: 20px; max-width: 560px; }
+.hm-search input { flex: 1 1 auto; min-width: 0; width: auto; }
+.hm-search button { margin: 0; }
+.hm-stats { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hm-stats li { min-width: 0; }
+.hm-stats a { display: flex; flex-direction: column; gap: 2px; height: 100%; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border, #1f2d47); background: var(--bg-secondary, #0f1729); color: inherit; text-decoration: none; transition: border-color .15s; }
+.hm-stats a:hover, .hm-stats a:focus-visible { border-color: var(--accent, #3b82f6); }
+.hm-stats b { font-size: 1.6rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hm-stats span { font-size: .85rem; line-height: 1.35; color: var(--text-secondary, #96a7c2); }
+.hm-sec { margin-top: 48px; }
+.hm-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.hm-head h2 { margin: 0; font-size: clamp(1.3rem, 2.4vw, 1.75rem); letter-spacing: -.01em; }
+.hm-more { font-weight: 600; font-size: .95rem; text-decoration: none; white-space: nowrap; }
+.hm-more:hover { text-decoration: underline; text-underline-offset: 3px; }
+.hm-lede { margin: 4px 0 14px; color: var(--text-secondary, #96a7c2); font-size: .98rem; }
+.hm-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); }
+.hm-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border, #1f2d47); background: var(--bg-card, #131c2e); transition: border-color .15s; }
+.hm-card:hover { border-color: color-mix(in srgb, var(--accent, #3b82f6) 55%, var(--border, #1f2d47)); }
+.hm-card h3 { margin: 0; font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.hm-card h3 a { color: var(--text-primary, #e6edf7); text-decoration: none; }
+.hm-card h3 a:hover { color: var(--accent-light, #60a5fa); text-decoration: underline; text-underline-offset: 3px; }
+.hm-price { margin: auto 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.hm-card .price { font-size: 1.15rem; }
+.hm-card .badge { font-size: .72rem; }
+.hm-ends { margin: 0; font-size: .85rem; font-weight: 600; }
+.hm-ends .meta { font-weight: 400; font-size: .78rem; }
+.hm-where { margin: 0; font-size: .82rem; overflow-wrap: anywhere; }
+.hm-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.hm-chips li { min-width: 0; max-width: 100%; }
+.hm-chips a { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-light, #2c3d5c); background: var(--bg-secondary, #0f1729); color: var(--text-primary, #e6edf7); text-decoration: none; font-size: .92rem; overflow-wrap: anywhere; }
+.hm-chips a:hover, .hm-chips a:focus-visible { border-color: var(--accent, #3b82f6); }
+.hm-n { font-size: .78rem; font-weight: 700; color: var(--text-muted, #7386a3); font-variant-numeric: tabular-nums; }
+.hm-cf { margin: 0; }
+.hm-faq { display: grid; gap: 8px; }
+.hm-faq details { border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-card, #131c2e); padding: 0 16px; }
+.hm-faq summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
+.hm-faq p { margin: 0 0 14px; color: var(--text-secondary, #96a7c2); }
+.hm-empty { margin-top: 24px; }
+@media (max-width: 600px) { .hm-search { flex-wrap: wrap; } .hm-search button { width: 100%; } .hm-stats b { font-size: 1.3rem; } .hm-stats a { padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { .hm-card, .hm-stats a { transition: none; } }
+.hm-card .price-none { font-size: .88rem; font-weight: 500; }
+/* A phone shows four cards a section (all eight stay in the page for crawlers and the "see all" link has the rest). */
+@media (max-width: 600px) { .hm-cards > li:nth-child(n+5) { display: none; } }

@@ -7,6 +7,11 @@
  *   newest   active offers by first posting time
  *   search   active (or all non-disabled, with expired) offers whose title/description contain every word
  *   store    a store's offers, expired ones included and marked
+ *   category active offers in one category as their source states it (migration 0007), newest first
+ *   ending   active offers whose STATED end falls in a window, soonest first (an unknown end is never assumed)
+ *   picks    active offers a source's editors picked (staff_pick), newest first
+ *   upvoted  active offers whose latest hotness is above zero (people voted them up), hottest first
+ *   under    active offers whose latest observation states a price at or below a limit in one currency
  */
 const { tokens } = require('./values');
 
@@ -36,6 +41,20 @@ function createListings({ store }) {
                                  AND ((a.product_id IS NOT NULL AND b.product_id = a.product_id) OR lower(b.title) = lower(a.title))
                                WHERE a.merged_into IS NULL AND b.merged_into IS NULL AND a.status <> 'disabled' AND b.status <> 'disabled'
                                ORDER BY b.created_at DESC LIMIT ?`),
+        categories: db.prepare(`SELECT category, COUNT(*) AS n, MAX(created_at) AS latest FROM deal_offers WHERE category IS NOT NULL AND status = 'active' AND merged_into IS NULL GROUP BY category ORDER BY n DESC, category LIMIT 1000`),
+        byCategory: db.prepare(`SELECT * FROM deal_offers WHERE category = ? AND status = 'active' AND merged_into IS NULL ORDER BY created_at DESC, seq DESC LIMIT ? OFFSET ?`),
+        countCategory: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE category = ? AND status = 'active' AND merged_into IS NULL`),
+        ending: db.prepare(`SELECT * FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND expires_at > ? AND expires_at <= ? ORDER BY expires_at, seq LIMIT ? OFFSET ?`),
+        countEnding: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND expires_at > ? AND expires_at <= ?`),
+        picks: db.prepare(`SELECT * FROM deal_offers WHERE staff_pick = true AND status = 'active' AND merged_into IS NULL ORDER BY created_at DESC, seq DESC LIMIT ? OFFSET ?`),
+        countPicks: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE staff_pick = true AND status = 'active' AND merged_into IS NULL`),
+        upvoted: db.prepare(`SELECT o.*, h.hot AS hot FROM deal_offers o JOIN deal_hotness_snapshots h ON ${LATEST}
+                             WHERE o.status = 'active' AND o.merged_into IS NULL AND h.hot > 0 ORDER BY h.hot DESC, o.created_at DESC, o.seq DESC LIMIT ?`),
+        // The latest observation of each offer (the one a card shows), when it states a price in this currency at or below the limit.
+        under: db.prepare(`SELECT o.* FROM deal_offers o JOIN deal_price_observations p ON p.id = (SELECT id FROM deal_price_observations WHERE offer_id = o.id ORDER BY observed_at DESC, seq DESC LIMIT 1)
+                           WHERE o.status = 'active' AND o.merged_into IS NULL AND p.price_num IS NOT NULL AND p.price_num <= ? AND p.currency = ? AND p.observed_at > ?
+                           ORDER BY o.created_at DESC, o.seq DESC LIMIT ?`),
+        seenSince: db.prepare('SELECT COUNT(*) AS n FROM deal_price_observations WHERE observed_at > ?'),
         pendingReview: db.prepare(`SELECT * FROM deal_offers WHERE review_state = 'pending' AND merged_into IS NULL AND status <> 'disabled' ORDER BY created_at DESC LIMIT ?`),
     };
 
@@ -66,11 +85,21 @@ function createListings({ store }) {
         products: async () => await q.products.all(),
         possibleDuplicates: async (limit = 50) => await q.duplicates.all(limit),
         pendingReview: async (limit = 50) => await q.pendingReview.all(limit),
+        categories: async () => (await q.categories.all()).map((r) => ({ category: r.category, slug: sellerSlug(r.category), count: Number(r.n), latest: r.latest == null ? null : Number(r.latest) })),
+        byCategory: async (category, limit, offset) => await q.byCategory.all(category, limit, offset),
+        countCategory: async (category) => Number((await q.countCategory.get(category)).n),
+        endingSoon: async (from, to, limit, offset = 0) => await q.ending.all(from, to, limit, offset),
+        countEnding: async (from, to) => Number((await q.countEnding.get(from, to)).n),
+        picks: async (limit, offset = 0) => await q.picks.all(limit, offset),
+        countPicks: async () => Number((await q.countPicks.get()).n),
+        upvoted: async (limit) => await q.upvoted.all(limit),
+        under: async (max, currency, observedAfter, limit) => await q.under.all(max, currency, observedAfter, limit),
+        seenSince: async (t) => Number((await q.seenSince.get(t)).n),
         search,
     };
 }
 
-/** "Best Buy" → "best-buy", "Target.com" → "target-com": a seller's address under /at/. */
+/** "Best Buy" → "best-buy", "Target.com" → "target-com": a seller's address under /at/ (and a category's under /c/). */
 const sellerSlug = (name) => String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
 
 module.exports = { createListings, sellerSlug };
