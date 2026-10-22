@@ -195,7 +195,7 @@ function createPages(ctx) {
         const faq = home.faqItems({ freshnessHours: Math.round(config.freshnessMs / 3600000) });
         const listed = [...picks, ...upvoted, ...latest];
         send(req, res, 200, {
-            title: 'Today\'s deals, each price with the time it was seen',
+            title: 'Today\'s deals, every price with its time',
             description: 'Deals from Amazon, Walmart, Best Buy and more, by shop, category and end date, with price watches and crowdfunding. Every price says when it was seen.',
             // The home page carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
             summary: SITE_SUMMARY, styles: [showcase.STYLESHEET],
