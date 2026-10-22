@@ -11,7 +11,7 @@
   "sdk": "openvibe-sdk v0.60.0",
   "shared": "openvibe-shared v4.4.0",
   "packages": [
-    "openvibe-publishing v1.3.0",
+    "openvibe-publishing v1.4.1",
     "openvibe-contracts v0.209.0",
     "openvibe-shared v4.4.0",
     "openvibe-sdk v0.60.0"
@@ -53,5 +53,5 @@
     "SDK outbox events and Search index documents",
     "per-actor limits (openvibe-sdk/limits)"
   ],
-  "updated": "2026-10-20"
+  "updated": "2026-10-22"
 }
