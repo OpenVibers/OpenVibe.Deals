@@ -221,6 +221,45 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         assert.strictEqual((await t.get('/at/..%2Fadmin')).status, 404);
     });
 
+    await check('a deal feed\'s category and editors\' pick (Sources feed@3): on the offer, /c, /picks and the front page', async () => {
+        const link = 'https://www.dealnews.com/TCL-65-4K-TV/22300001.html?iref=rss';
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAC1', sourceKey: 'dealnews-daily', kind: 'article', title: 'TCL 65" 4K TV for $398 + free shipping', url: link,
+            fields: { categories: ['TVs'], staff_pick: true, price: '398.00', currency: 'USD', seller: 'Best Buy', valid_until: new Date(t.clock.now() + 2 * 86400000).toISOString() }, retrievedAt: t.clock.now() }));
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAC2', sourceKey: 'dealnews-daily', kind: 'article', title: 'Scrub sponges 12-pack for $9 + free shipping w/ Prime', url: 'https://www.dealnews.com/sponges/22300002.html?iref=rss',
+            fields: { categories: ['Cleaning Supplies'], staff_pick: false, price: '9.00', currency: 'USD', seller: 'Amazon', valid_until: new Date(t.clock.now() + 3 * 86400000).toISOString() }, retrievedAt: t.clock.now() }));
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAC3', sourceKey: 'dealnews-daily', kind: 'article', title: 'Phone charger for $12', url: 'https://www.dealnews.com/charger/22300003.html?iref=rss',
+            fields: { categories: ['Cell Phones'], price: '12.00', currency: 'USD', seller: 'Walmart' }, retrievedAt: t.clock.now() }));
+        await t.ctx.importer.pull();
+        const tv = await byUrl(link);
+        assert.deepStrictEqual([tv.category, tv.staff_pick], ['TVs', true], 'the stated category and pick');
+        assert.strictEqual((await byUrl('https://www.dealnews.com/sponges/22300002.html?iref=rss')).staff_pick, false);
+        assert.strictEqual((await t.offerJson(tv.slug)).category, 'TVs');
+        const cats = await t.get('/c');
+        assert.ok(cats.text.includes('<a href="/c/tvs">TVs</a>') && cats.text.includes('<a href="/c/cleaning-supplies">Cleaning Supplies</a>'));
+        const tvs = await t.get('/c/tvs');
+        assert.ok(tvs.status === 200 && tvs.text.includes('<h1>TVs deals</h1>') && tvs.text.includes('TCL 65') && !tvs.text.includes('Scrub sponges'));
+        assert.strictEqual((await t.get('/c/nothing-here')).status, 404);
+        const picks = await t.get('/picks');
+        assert.ok(picks.text.includes('TCL 65') && !picks.text.includes('Scrub sponges'), 'only picks');
+        const home = await t.get('/');
+        const at = (id) => home.text.indexOf(`id="${id}"`);
+        const body = home.text.slice(home.text.indexOf('<main'));
+        assert.ok(at('hm-picks') > 0 && body.split('TCL 65').length === 2 && home.text.indexOf('TCL 65', at('hm-picks')) < at('hm-new'), 'the pick leads the page, once');
+        assert.ok(home.text.includes('href="/c/tvs">TVs'), 'categories on the front page');
+        assert.ok(home.text.includes('via <a href="https://www.dealnews.com/" rel="nofollow noopener">DealNews</a>'), 'every DealNews card says so');
+        assert.ok(at('hm-ending') > 0 && home.text.includes('Ends <time'), 'the stated end, in Ending soon');
+        assert.ok(home.text.slice(at('hm-ending'), at('hm-under')).includes('Scrub sponges'), 'a new deal that ends this week is in Ending soon too');
+        assert.ok(!home.text.slice(at('hm-under'), at('hm-categories')).includes('$398.00'), 'nothing above the limit under it');
+        // A later revision filing it elsewhere moves it.
+        t.sources.put(sourceItem({ id: 'itm_01K5AAAAAAAAAAAAAAAAAAAAC1', sourceKey: 'dealnews-daily', kind: 'article', title: 'TCL 65" 4K TV for $398 + free shipping', url: link,
+            fields: { categories: ['Electronics'], staff_pick: false, price: '398.00', currency: 'USD', seller: 'Best Buy' }, revision: 2, retrievedAt: t.clock.now() + 1000 }));
+        await t.ctx.importer.pull();
+        assert.deepStrictEqual([(await byUrl(link)).category, (await byUrl(link)).staff_pick], ['Electronics', false]);
+        assert.strictEqual((await t.get('/c/tvs')).status, 404, 'an empty category is gone');
+        const sm = await t.get('/sitemaps/pages.xml');
+        assert.ok(sm.text.includes('<loc>https://openvibe.deals/c/electronics</loc>') && sm.text.includes('<loc>https://openvibe.deals/at/amazon</loc>'));
+    });
+
     await check('Sources down: the pull fails honestly (readiness says so), keeps its cursor, invents nothing', async () => {
         const cursor = await t.ctx.importer.cursor();
         const offers = (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM deal_offers').get()).n;

@@ -248,6 +248,22 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.ok(ld.some((x) => x['@type'] === 'WebPage' && x.description && x.url === 'https://openvibe.deals/'), 'WebPage JSON-LD names the home URL and summary');
     });
 
+    await check('the front page: one h1, a search, its sections and questions (FAQPage JSON-LD); the hot list lives at /hot', async () => {
+        const home = await t.get('/');
+        assert.strictEqual((home.text.match(/<h1[\s>]/g) || []).length, 1, 'one h1');
+        assert.ok(home.text.includes('action="/search"') && home.text.includes('id="hm-new"') && home.text.includes('id="hm-faq"'));
+        const ld = jsonLd(home.text);
+        for (const type of ['WebSite', 'FAQPage', 'ItemList']) assert.ok(ld.some((x) => x['@type'] === type), type);
+        const faq = ld.find((x) => x['@type'] === 'FAQPage');
+        for (const q of faq.mainEntity) assert.ok(home.text.includes(`<summary>${q.name.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</summary>`), `the question is on the page: ${q.name}`);
+        assert.doesNotMatch(home.text, /coming soon/i);
+        const old = await t.get('/?page=2');
+        assert.deepStrictEqual([old.status, old.headers.get('location')], [301, '/hot?page=2']);
+        for (const p of ['/hot', '/ending', '/picks', '/c']) assert.strictEqual((await t.get(p)).status, 200, p);
+        assert.ok((await t.get('/sitemap.xml')).text.includes('<loc>https://openvibe.deals/sitemaps/pages.xml</loc>'));
+        assert.ok((await t.get('/sitemaps/pages.xml')).text.includes('<loc>https://openvibe.deals/</loc>'));
+    });
+
     await check('operations: health, readiness, release.json, metrics (loopback), legal pages', async () => {
         assert.strictEqual((await t.get('/api/health')).json().service, 'openvibe-deals');
         const ready = await t.get('/api/ready');

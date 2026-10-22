@@ -9,7 +9,6 @@
  */
 const { html, raw, renderMarkdown, paginationHtml, breadcrumbsHtml } = require('openvibe-publishing/ssr');
 const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/values');
-const showcase = require('openvibe-shared/showcase');
 
 const pad = (n) => String(n).padStart(2, '0');
 function when(ms) {
@@ -88,24 +87,6 @@ ${attributionLine(v.attribution)}
 </div></li>`;
 }
 
-/** The front page opens with what OpenVibe.Deals is for (openvibe-shared/showcase); the hot list follows it. */
-function dealsShowcase() {
-    return showcase.hero({
-        eyebrow: 'OpenVibe.Deals',
-        title: 'Deals where every price', accent: 'says when',
-        lede: 'People post deals and vote them up or down. Every price is an observation with its source and the time it was seen: an old one says it may no longer be available, and a price nobody stated stays "not stated".',
-        actions: [{ label: 'Browse hot deals', href: '#deals', primary: true }, { label: 'Submit a deal', href: '/submit' }],
-    }) + showcase.features({
-        title: 'How it works',
-        items: [
-            { icon: 'ov:history', title: 'Prices as of a time', text: 'Each deal keeps every price it was seen at, newest first, each with its source. Nothing is called current without a fresh one.' },
-            { icon: 'ov:check', title: 'Votes decide what is hot', text: 'One vote per person, counted on the server. A deal page shows its hotness with the formula and the inputs.' },
-            { icon: 'ov:search', title: 'Compare across stores', text: 'A product page lists every offer for it, each with its own latest price and the time it was seen.' },
-            { icon: 'ov:bell', title: 'Watches and saved searches', text: 'Watch words, a product or a price limit for new prices that match, or save a search to run again.' },
-        ],
-    });
-}
-
 function offerList({ heading, intro, views, pager, urls, tabs, empty, lead }) {
     // Under the showcase the list's heading is an h2 above the sort tabs, so #deals lands on both.
     return html`${lead ? html`${raw(lead)}<h2 id="deals">${heading}</h2>` : ''}${tabs ? raw(tabs) : ''}
@@ -117,7 +98,7 @@ ${raw(pager ? paginationHtml(pager) : '')}`;
 
 function tabs(active) {
     const t = (href, label, key) => (key === active ? html`<span aria-current="page">${label}</span>` : html`<a href="${href}">${label}</a>`);
-    return html`<nav class="tabs" aria-label="Sort">${t('/', 'Hot', 'hot')} ${t('/new', 'New', 'new')} <form class="inline search" action="/search" method="get" role="search"><label class="sr" for="q">Search deals</label><input id="q" name="q" type="search" placeholder="Search deals"><button type="submit">Search</button></form></nav>`.toString();
+    return html`<nav class="tabs" aria-label="Sort">${t('/hot', 'Hot', 'hot')} ${t('/new', 'New', 'new')} ${t('/ending', 'Ending soon', 'ending')} ${t('/picks', 'Picks', 'picks')} <form class="inline search" action="/search" method="get" role="search"><label class="sr" for="q">Search deals</label><input id="q" name="q" type="search" placeholder="Search deals"><button type="submit">Search</button></form></nav>`.toString();
 }
 
 function observationTable(v, urls) {
@@ -330,8 +311,25 @@ function sellersPage({ sellers }) {
 ${sellers.length ? html`<ul class="seller-list">${sellers.map((x) => html`<li><a href="/at/${x.slug}">${x.seller}</a> <span class="meta">${x.count} deal${x.count === 1 ? '' : 's'}</span></li>`)}</ul>` : html`<p class="empty">No shops yet.</p>`}`;
 }
 
+/** /c/:category: active deals in one category, as their sources name it. */
+function categoryPage({ category, views: list, pager, urls, total }) {
+    return html`${raw(breadcrumbsHtml([{ name: 'Deals', url: '/' }, { name: 'Categories', url: '/c' }, { name: category }]))}
+<h1>${category} deals</h1>
+<p class="lede">${total} active deal${total === 1 ? '' : 's'} in ${category}, as the deal sources file them, newest first. Every price shows when it was seen.</p>
+${list.length ? html`<ol class="deal-list">${list.map((v) => offerCard(v, urls))}</ol>` : html`<p class="empty">No active deals in this category right now.</p>`}
+${raw(pager ? paginationHtml(pager) : '')}`;
+}
+
+/** /c: every category with active deals, most deals first. */
+function categoriesPage({ categories }) {
+    return html`${raw(breadcrumbsHtml([{ name: 'Deals', url: '/' }, { name: 'Categories' }]))}
+<h1>Deals by category</h1>
+<p class="lede">Every category with an active deal, as the deal sources name it, the most deals first.</p>
+${categories.length ? html`<ul class="seller-list">${categories.map((x) => html`<li><a href="/c/${x.slug}">${x.category}</a> <span class="meta">${x.count} deal${x.count === 1 ? '' : 's'}</span></li>`)}</ul>` : html`<p class="empty">No deal has a category yet.</p>`}`;
+}
+
 function message({ heading, text, action }) {
     return html`<h1>${heading}</h1><p>${text}</p>${action ? html`<p><a href="${action.href}">${action.label}</a></p>` : ''}`;
 }
 
-module.exports = { dealsShowcase, offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, sellerPage, sellersPage, message, priceText, when };
+module.exports = { offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, sellerPage, sellersPage, categoryPage, categoriesPage, message, priceText, when, ago };

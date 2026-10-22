@@ -4,7 +4,11 @@ const showcase = require('openvibe-shared/showcase');
 /**
  * Public, server-rendered routes — useful without JavaScript (every action is a plain form):
  *
- *   GET  /                       hot deals (hot@1 snapshots)          GET /new    newest deals
+ *   GET  /                       the front page: editors' picks, hot, newest, ending soon, under a price, categories,
+ *                                shops and crowdfunding, then how it works and questions (render/home.js)
+ *   GET  /hot                    hot deals (hot@1 snapshots)          GET /new    newest deals
+ *   GET  /ending                 deals whose stated end is in the next 7 days, soonest first
+ *   GET  /picks                  deals a source's editors picked      GET /c, /c/:category   deals by category
  *   GET  /d/:slug                an offer: latest observation "as of", freshness, price history,
  *                                sources, votes, discussion (…/:slug.json: the same facts as data)
  *   POST /d/:slug/vote           value=up|down|remove                 POST /d/:slug/observe
@@ -29,6 +33,7 @@ const cache = require('openvibe-shared/cache-policy');
 const ssr = require('openvibe-publishing/ssr');
 const { renderPage, SITE_SUMMARY } = require('../render/layout');
 const views = require('../render/views');
+const home = require('../render/home');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const { ApiError, iso } = require('../domain/values');
 
@@ -41,7 +46,7 @@ function createPages(ctx) {
     // Per-actor limits on the forms (http/actor-limits.js), before the form is read: each shares its budget
     // with the API route that does the same thing. Reading pages is left to the per-address limits.
     const B = (name) => actorLimits.budget(name);
-    const urls = { offerPath: publication.offerPath, productPath: publication.productPath, storePath: publication.storePath, sellerPath: publication.sellerPath };
+    const urls = { offerPath: publication.offerPath, productPath: publication.productPath, storePath: publication.storePath, sellerPath: publication.sellerPath, categoryPath: publication.categoryPath };
     const form = express.urlencoded({ extended: false, limit: '32kb' });
     const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -107,37 +112,118 @@ function createPages(ctx) {
 
     // ── lists ───────────────────────────────────────────────
 
+    const DAY = 24 * 3600 * 1000;
+    const FEEDS = [{ type: 'rss', href: '/feed.xml', title: 'New deals (RSS)' }, { type: 'atom', href: '/atom.xml', title: 'New deals (Atom)' }, { type: 'json', href: '/feed.json', title: 'New deals (JSON Feed)' }];
+    /** The list pages: each one's path, heading, intro and rows (newest-first unless said). */
+    const LISTS = {
+        hot: { path: '/hot', heading: 'Hot deals', intro: 'Ranked by community votes over time (hotness formula hot@1). Every price shows when it was observed.',
+            count: async () => await listings.countActive(), rows: async (n, off) => await listings.hot(n, off), empty: 'No deals have been posted yet. Submit the first one.' },
+        new: { path: '/new', heading: 'New deals', intro: 'The newest deals first. Every price shows when it was observed.',
+            count: async () => await listings.countActive(), rows: async (n, off) => await listings.newest(n, off), empty: 'No deals have been posted yet. Submit the first one.' },
+        ending: { path: '/ending', heading: 'Deals ending soon', intro: 'Deals whose source states an end in the next seven days, soonest first. A deal with no stated end is never listed here.',
+            description: 'Deals ending in the next seven days, soonest first, each with its stated end, its price and when that price was seen.',
+            count: async () => await listings.countEnding(store.now(), store.now() + 7 * DAY), rows: async (n, off) => await listings.endingSoon(store.now(), store.now() + 7 * DAY, n, off), empty: 'No deal states an end in the next seven days.' },
+        picks: { path: '/picks', heading: 'Editors\' picks', intro: 'Deals a source\'s editors marked as their picks (DealNews\' staff picks), newest first.',
+            description: 'Deals picked by DealNews\' editors, newest first, each with its price and the time it was seen.',
+            count: async () => await listings.countPicks(), rows: async (n, off) => await listings.picks(n, off), empty: 'No picks right now.' },
+    };
+
     async function listPage(req, res, kind) {
+        const L = LISTS[kind];
         const page = pageNumber(req);
-        const path = kind === 'hot' ? '/' : '/new';
-        const total = await listings.countActive();
+        const path = L.path;
+        const total = await L.count();
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
-        const rows = kind === 'hot' ? await listings.hot(PER_PAGE, pager.offset) : await listings.newest(PER_PAGE, pager.offset);
-        const list = await Promise.all(rows.map(async (o) => await publication.offerView(o)));
+        const list = await Promise.all((await L.rows(PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         send(req, res, 200, {
-            title: kind === 'hot' ? 'Hot deals' : 'New deals',
-            description: 'Deals submitted and voted on by the community, each with its source and the time its price was observed.',
-            // The home page carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
-            ...(kind === 'hot' && pager.page === 1 ? { summary: SITE_SUMMARY, styles: [showcase.STYLESHEET] } : {}),
+            title: L.heading,
+            description: L.description || 'Deals submitted and voted on by the community, each with its source and the time its price was observed.',
             decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
             canonical,
-            feeds: [{ type: 'rss', href: '/feed.xml', title: 'New deals (RSS)' }, { type: 'atom', href: '/atom.xml', title: 'New deals (Atom)' }, { type: 'json', href: '/feed.json', title: 'New deals (JSON Feed)' }],
+            feeds: FEEDS,
             prev: pager.prev ? pager.prev.href : null,
             next: pager.next ? pager.next.href : null,
-            jsonLd: [{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'OpenVibe.Deals', url: publication.abs('/'), potentialAction: { '@type': 'SearchAction', target: `${publication.abs('/search')}?q={q}`, 'query-input': 'required name=q' } }],
-            body: views.offerList({
-                heading: kind === 'hot' ? 'Hot deals' : 'New deals',
-                intro: kind === 'hot' ? 'Ranked by community votes over time (hotness formula hot@1). Every price shows when it was observed.' : 'The newest deals first. Every price shows when it was observed.',
-                views: list, pager, urls, tabs: views.tabs(kind),
-                lead: kind === 'hot' && pager.page === 1 ? views.dealsShowcase() : '',
-                empty: 'No deals have been posted yet. Submit the first one.',
-            }),
+            body: views.offerList({ heading: L.heading, intro: L.intro, views: list, pager, urls, tabs: views.tabs(kind), empty: L.empty }),
         }, { cacheable: true });
     }
 
-    router.get('/', wrap(async (req, res) => await listPage(req, res, 'hot')));
+    // ── the front page ──────────────────────────────────────
+
+    // "Under $20": the most common currency's round limit. A card shows only a fresh, stated price at or below it.
+    const UNDER = { amount: 20, currency: 'USD' };
+    const HOME_CARDS = 8;
+
+    async function homePage(req, res) {
+        const now = store.now();
+        const fresh = now - config.freshnessMs;
+        const [total, sellers, categories, seenDay, endingWeek, cf] = await Promise.all([
+            listings.countActive(), listings.sellers(), listings.categories(), listings.seenSince(now - DAY),
+            listings.countEnding(now, now + 7 * DAY), ctx.campaigns ? ctx.campaigns.list({ sort: 'backers', limit: 6 }) : { total: 0, campaigns: [] },
+        ]);
+        // A deal shows once: picks and hot lead, the newest follow, and "under $20" skips all of those. "Ending soon"
+        // skips only the picks and hot ones (a new deal that ends this week belongs there too). The candidates' cards are
+        // read in parallel, then dealt out in that order.
+        const [pickRows, upRows, newRows, endRows, underRows] = await Promise.all([
+            listings.picks(HOME_CARDS * 2, 0), listings.upvoted(HOME_CARDS * 2), listings.newest(HOME_CARDS * 3, 0),
+            listings.endingSoon(now, now + 7 * DAY, HOME_CARDS * 2, 0), listings.under(UNDER.amount, UNDER.currency, fresh, HOME_CARDS * 4),
+        ]);
+        const viewOf = new Map();
+        for (const o of [...pickRows, ...upRows, ...newRows, ...endRows, ...underRows]) if (!viewOf.has(o.id)) viewOf.set(o.id, publication.cardView(o, now));
+        await Promise.all(viewOf.values());
+        const top = new Set();
+        const shown = new Set();
+        const take = async (rows, { skip = shown, keep = () => true, into = [top, shown] } = {}) => {
+            const out = [];
+            for (const o of rows) {
+                if (out.length >= HOME_CARDS || skip.has(o.id)) continue;
+                const v = await viewOf.get(o.id);
+                if (!keep(v)) continue;
+                for (const set of into) set.add(o.id);
+                out.push(v);
+            }
+            return out;
+        };
+        const picks = await take(pickRows);
+        const upvoted = await take(upRows);
+        const latest = await take(newRows, { into: [shown] });
+        const ending = await take(endRows, { skip: top, into: [shown] });
+        const under = await take(underRows, {
+            into: [shown], keep: (v) => v.freshness.state === 'fresh' && v.latest && v.latest.currency === UNDER.currency && Number(v.latest.price) <= UNDER.amount,
+        });
+        const faq = home.faqItems({ freshnessHours: Math.round(config.freshnessMs / 3600000) });
+        const listed = [...picks, ...upvoted, ...latest];
+        send(req, res, 200, {
+            title: 'Today\'s deals, each price with the time it was seen',
+            description: 'Deals from Amazon, Walmart, Best Buy and more, by shop, category and end date, with price watches and crowdfunding. Every price says when it was seen.',
+            // The home page carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
+            summary: SITE_SUMMARY, styles: [showcase.STYLESHEET],
+            decision: pageDecision('/', { empty: total === 0 }),
+            canonical: seo.canonicalUrl(config.baseUrl, '/'),
+            feeds: FEEDS,
+            jsonLd: [
+                { '@context': 'https://schema.org', '@type': 'WebSite', name: 'OpenVibe.Deals', url: publication.abs('/'), potentialAction: { '@type': 'SearchAction', target: `${publication.abs('/search')}?q={q}`, 'query-input': 'required name=q' } },
+                ...(listed.length ? [{ '@context': 'https://schema.org', '@type': 'ItemList', name: 'Deals on OpenVibe.Deals', itemListElement: listed.map((v, i) => ({ '@type': 'ListItem', position: i + 1, url: publication.abs(publication.offerPath(v.root)), name: v.root.title })) }] : []),
+                home.faqJsonLd(faq),
+            ],
+            bodyClass: 'home',
+            body: home.homePage({
+                empty: total === 0, freshnessHours: Math.round(config.freshnessMs / 3600000), faq,
+                stats: { active: total, shops: sellers.length, seenDay, endingWeek, categories: categories.length, campaigns: cf.total },
+                picks, upvoted, latest, ending, under, underLimit: UNDER, categories, sellers, campaigns: cf.campaigns,
+            }, urls),
+        }, { cacheable: true });
+    }
+
+    router.get('/', wrap(async (req, res) => {
+        // The hot list's later pages moved to /hot with the front page.
+        if (req.query.page && pageNumber(req) > 1) return res.redirect(301, `/hot?page=${pageNumber(req)}`);
+        await homePage(req, res);
+    }));
+    router.get('/hot', wrap(async (req, res) => await listPage(req, res, 'hot')));
+    router.get('/ending', wrap(async (req, res) => await listPage(req, res, 'ending')));
+    router.get('/picks', wrap(async (req, res) => await listPage(req, res, 'picks')));
     // What shipped on OpenVibe.Deals: the shared update log every OpenVibe site has.
     router.get('/updates', (req, res) => send(req, res, 200, {
         title: 'What shipped on OpenVibe.Deals', description: 'Every change deployed to OpenVibe.Deals, newest first.',
@@ -319,6 +405,33 @@ function createPages(ctx) {
             description: `${total} deal${total === 1 ? '' : 's'} at ${hit.seller}, each with its source, price and when it was seen.`,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             body: views.sellerPage({ seller: hit.seller, views: list, pager, urls, total }),
+        }, { cacheable: true });
+    }));
+
+    // ── categories (as each deal's source names it, migration 0007) ──
+    router.get('/c', wrap(async (req, res) => {
+        const categories = await listings.categories();
+        send(req, res, 200, {
+            title: 'Deals by category', decision: pageDecision('/c', { empty: categories.length === 0 }), canonical: seo.canonicalUrl(config.baseUrl, '/c'),
+            description: 'Every deal category on OpenVibe.Deals, from TVs to cleaning supplies, with how many active deals each has.',
+            body: views.categoriesPage({ categories }),
+        }, { cacheable: true });
+    }));
+    router.get('/c/:category', wrap(async (req, res) => {
+        const want = String(req.params.category || '').toLowerCase();
+        const hit = /^[a-z0-9-]{1,80}$/.test(want) ? (await listings.categories()).find((x) => x.slug === want) : null;
+        if (!hit) return notFound(req, res);
+        const path = `/c/${hit.slug}`;
+        const total = await listings.countCategory(hit.category);
+        const pager = ssr.paginate({ page: pageNumber(req), perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
+        if (pager.outOfRange && total) return notFound(req, res);
+        const list = await Promise.all((await listings.byCategory(hit.category, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
+        const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
+        send(req, res, 200, {
+            title: `${hit.category} deals`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
+            description: `${total} active ${hit.category} deal${total === 1 ? '' : 's'}, each with its shop, its price and when that price was seen.`,
+            prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
+            body: views.categoryPage({ category: hit.category, views: list, pager, urls, total }),
         }, { cacheable: true });
     }));
 
