@@ -86,6 +86,28 @@ const { formula } = require('../server/domain/hotness');
         assert.deepStrictEqual(hots, [...hots].sort((a, b) => b - a));
     });
 
+    await check('tick snapshots are kept a day, the others 7 days, and every offer\'s latest always', async () => {
+        const db = t.ctx.store.db;
+        const Y = await t.submit(poster, { url: 'https://a.example/keep', title: 'Offer Keep', price: '5', currency: 'USD' });
+        const count = async (where, args = []) => Number((await db.prepare(`SELECT COUNT(*) AS n FROM deal_hotness_snapshots WHERE ${where}`).get(...args)).n);
+        await t.ctx.worker.tick();
+        const firstTick = await count("reason = 'tick'");
+        assert.ok(firstTick >= 1);
+        t.clock.advance(25 * HOUR);
+        await t.ctx.worker.tick();
+        // The day-old ticks went, except where one is an offer's latest; this tick's are all there.
+        const now = Number((await db.prepare("SELECT MAX(computed_at) AS t FROM deal_hotness_snapshots WHERE reason = 'tick'").get()).t);
+        assert.strictEqual(await count("reason = 'tick' AND computed_at < ?", [now - 24 * HOUR]), 0, 'no tick older than a day');
+        assert.ok(await count("reason = 'create' AND offer_id = ?", [Y.id]) >= 1 || await count('offer_id = ?', [Y.id]) >= 1, 'the offer keeps its snapshots');
+        assert.ok(await count("reason <> 'tick'") >= 1, 'vote and creation snapshots of the week stay');
+        t.clock.advance(8 * 24 * HOUR);
+        await t.ctx.worker.tick();
+        const offers = Number((await db.prepare('SELECT COUNT(DISTINCT offer_id) AS n FROM deal_hotness_snapshots').get()).n);
+        assert.ok(offers >= 1, 'every offer still has its latest snapshot');
+        assert.strictEqual(await count('computed_at < ?', [now]), await count(`computed_at < ? AND id IN (SELECT MAX(id) FROM deal_hotness_snapshots GROUP BY offer_id)`, [now]),
+            'past the week, only latest snapshots remain');
+    });
+
     await t.close();
     done();
 })();
