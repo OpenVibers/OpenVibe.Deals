@@ -15,14 +15,37 @@
  *   GET /sitemaps/pages.xml     the front page and the lists: hot, new, ending soon, picks, every category and shop,
  *                               crowdfunding (an empty list is noindex and left out)
  *
- * Built from the database on every request, never from the viewer. Stale, expired, disabled,
- * merged and unreviewed offers never appear.
+ * Built from the database, never from the viewer (the offer and product lists at most once per
+ * config.sitemapTtlMs, shared by concurrent readers). Stale, expired, disabled, merged and unreviewed
+ * offers never appear.
  */
 const express = require('express');
 const seo = require('openvibe-publishing/seo');
 const sharedSeo = require('openvibe-shared/seo');
 const cache = require('openvibe-shared/cache-policy');
 const { SITE_SUMMARY } = require('../render/layout');
+
+// Offers or products whose page view a list build reads at once (the pool has a handful of connections for everyone).
+const VIEWS_PARALLEL = 8;
+
+/** fn over items, `limit` at a time; results in the items' order. */
+async function mapLimit(items, limit, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
+}
+
+/** One build at a time, shared by the readers that ask while it runs, reused for ttlMs (0: the next read rebuilds). */
+function shared(build, ttlMs, now) {
+    let value = null; let at = 0; let running = null;
+    return async () => {
+        if (value && now() - at < ttlMs) return value;
+        if (!running) running = build().then((v) => { value = v; at = now(); return v; }).finally(() => { running = null; });
+        return await running;
+    };
+}
 
 function createDiscoveryRoutes({ config, store, publication, listings }) {
     const router = express.Router();
@@ -31,18 +54,18 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     /** A short, whitespace-collapsed summary; the full source text is never included. */
     const brief = (value, max = 200) => String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, max);
 
-    async function offerEntries() {
-        return Promise.all((await listings.indexable()).map(async (o) => {
-            const v = await publication.offerView(o);
-            return { offer: o, view: v, loc: abs(publication.offerPath(o)), lastmod: v.latest ? Math.max(v.latest.observed_at, o.updated_at) : o.updated_at, decision: v.decision };
-        }));
-    }
-    async function productEntries() {
-        return Promise.all((await listings.products()).map(async (p) => {
-            const pv = await publication.productView(p);
-            return { loc: abs(publication.productPath(p)), lastmod: Math.max(p.updated_at, ...pv.offers.map((v) => Math.max(v.root.updated_at, v.latest ? v.latest.observed_at : 0))), decision: pv.decision };
-        }));
-    }
+    // Every offer's and product's page view, for the sitemaps and /llms-full.txt: built VIEWS_PARALLEL at a time, once
+    // for concurrent readers, reused for config.sitemapTtlMs. All at once, each /sitemap.xml queued thousands of
+    // queries on the pool for a minute (2026-10-23), and every page waited behind them.
+    const ttl = Number(config.sitemapTtlMs) || 0;
+    const offerEntries = shared(async () => mapLimit(await listings.indexable(), VIEWS_PARALLEL, async (o) => {
+        const v = await publication.offerView(o);
+        return { offer: o, view: v, loc: abs(publication.offerPath(o)), lastmod: v.latest ? Math.max(v.latest.observed_at, o.updated_at) : o.updated_at, decision: v.decision };
+    }), ttl, store.now);
+    const productEntries = shared(async () => mapLimit(await listings.products(), VIEWS_PARALLEL, async (p) => {
+        const pv = await publication.productView(p);
+        return { loc: abs(publication.productPath(p)), lastmod: Math.max(p.updated_at, ...pv.offers.map((v) => Math.max(v.root.updated_at, v.latest ? v.latest.observed_at : 0))), decision: pv.decision };
+    }), ttl, store.now);
 
     /** The lists a person browses (all indexable while they have something to show); lastmod = their newest deal. */
     async function pageEntries() {
