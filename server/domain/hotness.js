@@ -70,8 +70,16 @@ function createHotness({ store, reads }) {
     async function tick({ windowDays = 14, t = store.now() } = {}) {
         const ids = (await db.prepare(`SELECT id FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND created_at >= ?`).all(t - windowDays * 24 * HOUR)).map((r) => r.id);
         await store.tx(async () => { for (const id of ids) await snapshot(id, 'tick', t); });
-        // Keep the latest snapshot per offer and everything from the last 7 days.
-        await db.prepare(`DELETE FROM deal_hotness_snapshots WHERE computed_at < ? AND id NOT IN (SELECT MAX(id) FROM deal_hotness_snapshots GROUP BY offer_id)`).run(t - 7 * 24 * HOUR);
+        // Keep the latest snapshot per offer, every snapshot a vote, merge or creation made in the last 7 days, and the
+        // worker's own tick snapshots of the last day. A tick re-snapshots every active offer (about 2,700, every ten
+        // minutes), so seven days of ticks were 2.68M rows (805 MB, 2026-10-23) behind reads that only use the latest,
+        // and this delete took 1.4 s each time. At most 50,000 rows go per tick: a backlog drains over a few hours,
+        // each delete well inside the statement timeout.
+        await db.prepare(`DELETE FROM deal_hotness_snapshots WHERE id IN (
+            SELECT id FROM deal_hotness_snapshots
+             WHERE computed_at < ? AND (reason = 'tick' OR computed_at < ?)
+               AND id NOT IN (SELECT MAX(id) FROM deal_hotness_snapshots GROUP BY offer_id)
+             LIMIT 50000)`).run(t - 24 * HOUR, t - 7 * 24 * HOUR);
         return ids.length;
     }
 

@@ -185,7 +185,8 @@ hot      = round6( score / (ageHours + 2) ^ 1.5 )
 Worked examples (tested): up 3, down 1, 10 h old → 2 / 12^1.5 = **0.048113**; up 2, 0 h → **0.707107**.
 Snapshots are taken on every vote change, merge, unmerge and creation, and by the worker for every
 active offer of the last 14 days at **one shared `t`**, so the hot list compares numbers computed at
-the same moment.
+the same moment. The worker's tick snapshots are kept for a day, the others for 7 days, and every offer's latest
+snapshot always.
 
 **Abuse controls (server-side, database windows shared by forms and API):**
 
