@@ -15,7 +15,7 @@ const BUDGETS = {
     htmlRawKB: 32,   // 29.1 with the curated front page's search, questions (FAQ + JSON-LD) and closing call (2026-10-22); 23.5 before
     htmlBrotliKB: 8,   // 7.1 with the curated front page (6.0 before; 4.5 before the showcase)
     jsFiles: 5,   // 5 (openvibe-shared 2.10's shell adds web-runtime.js)
-    jsRawKB: 250,   // 239.1 (212.2 before web-runtime.js)
+    jsRawKB: 256,   // 254.1 with openvibe-shared 4.9.0 (status text twins in every theme, 2026-10-23); 239.1 (212.2 before web-runtime.js)
     jsBrotliKB: 60,   // 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 2 (deals.css, openvibe-shared showcase.css)
     cssRawKB: 26,   // 24.2 with the front page's stats, cards, chips and questions (19.0 before)
