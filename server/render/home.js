@@ -159,6 +159,7 @@ ${raw(showcase.features({
         ],
     }))}
 ${faq(d.faq)}
+${raw(showcase.network({ service: 'deals' }))}
 ${raw(showcase.cta({ title: 'Know a good deal?', text: 'Post it with the price you see and the time is recorded with it. People vote, and the best rise to the top.', actions: [{ label: 'Post a deal', href: '/submit', primary: true }, { label: 'Find coupon codes on OpenVibe.Coupons', href: 'https://openvibe.coupons/' }] }))}`;
 }
 
