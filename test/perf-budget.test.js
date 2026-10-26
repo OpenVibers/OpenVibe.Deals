@@ -18,8 +18,8 @@ const BUDGETS = {
     jsRawKB: 268,   // 263.4 with shared 4.11.0's seasonal navbar; 254.1 with openvibe-shared 4.9.0 (status text twins in every theme, 2026-10-23); 239.1 (212.2 before web-runtime.js)
     jsBrotliKB: 67,   // 65.3 Shared 4.12.0: the light/dark switch, the seasonal mark and the theme pairs; 61.7 with shared 4.11.0's seasonal navbar; 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 2 (deals.css, openvibe-shared showcase.css)
-    cssRawKB: 26,   // 24.2 with the front page's stats, cards, chips and questions (19.0 before)
-    cssBrotliKB: 6,   // 5.4 with the front page (2026-10-22); 4.7 with the crowdfunding rules; 1.5 before showcase.css
+    cssRawKB: 35,   // 30.4 with Shared 4.13.0 (2026-10-26: account links); 24.2 with the front page's stats, cards, chips and questions (19.0 before)
+    cssBrotliKB: 8,   // 6.5 with Shared 4.13.0 (2026-10-26: account links); 5.4 with the front page (2026-10-22); 4.7 with the crowdfunding rules; 1.5 before showcase.css
     externalFiles: 1,   // 0
 };
 
