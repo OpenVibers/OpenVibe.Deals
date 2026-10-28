@@ -118,9 +118,8 @@ function faqJsonLd(items) {
  */
 function homePage(d, urls) {
     const hero = html`<section class="sc-hero sc-split hm-hero"><div class="sc-hero-main">
-<p class="sc-eyebrow">OpenVibe.Deals</p>
 <h1>Today's deals,<span class="sc-accent"> with the time every price was seen</span></h1>
-<p class="sc-hero-lede">Deals from DealNews' editors and from the OpenVibe community, by shop, category and end date. Every price says when it was seen, and an old one says it may be gone.</p>
+<p class="sc-hero-lede">From DealNews' editors and the OpenVibe community. Every price says when it was seen, and an old one says it may be gone.</p>
 <form class="hm-search" action="/search" method="get" role="search"><label class="sr" for="hm-q">Search deals</label><input id="hm-q" name="q" type="search" maxlength="100" placeholder="Search deals, like air fryer or lululemon"><button type="submit">Search</button></form>
 <div class="sc-actions"><a class="sc-btn sc-primary" href="/new">See the newest deals</a><a class="sc-btn" href="/watches">Watch a price</a><a class="sc-btn" href="/submit">Post a deal</a></div>
 </div>
