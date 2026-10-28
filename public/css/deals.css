@@ -76,6 +76,32 @@ form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
 table.obs, table.compare { width: 100%; border-collapse: collapse; font-size: .92rem; display: block; overflow-x: auto; }
 table.obs th, table.obs td, table.compare th, table.compare td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border, #1f2d47); vertical-align: top; }
 table.obs caption, table.compare caption { text-align: left; color: var(--text-muted, #7386a3); font-size: .85rem; padding: 4px 0; }
+/* The price over time (views.js priceChart): tiles, then a step line with the high and low on the left. */
+.pc { margin: 8px 0 18px; }
+.pc-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.pc-tile { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border, #1f2d47); background: var(--bg-card, #131c2e); min-width: 0; }
+.pc-tile dt { color: var(--text-muted, #7386a3); font-size: .8rem; }
+.pc-tile dd { margin: 2px 0 0; display: flex; flex-direction: column; gap: 1px; }
+.pc-tile strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pc-tile .meta { font-size: .8rem; }
+.pc-best { border-color: color-mix(in srgb, var(--accent, #3b82f6) 60%, var(--border, #1f2d47)); }
+.pc-best .meta::before { content: "\2713\00a0"; }
+.pc-plot { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; }
+.pc-y { position: relative; min-width: 3ch; font-size: .78rem; color: var(--text-muted, #7386a3); font-variant-numeric: tabular-nums; }
+.pc-y span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+.pc-area { position: relative; height: 128px; margin: 0 6px; }
+.pc-area svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.pc-grid { stroke: var(--border, #1f2d47); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.pc-line { fill: none; stroke: var(--accent, #3b82f6); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.pc-dot, .pc-hit { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; }
+.pc-dot { width: 10px; height: 10px; box-shadow: 0 0 0 2px var(--bg-primary, #0b1220); pointer-events: none; }
+.pc-end { background: var(--accent, #3b82f6); }
+.pc-low { background: var(--bg-primary, #0b1220); border: 2px solid var(--accent, #3b82f6); }
+.pc-hit { width: 18px; height: 18px; }
+@media (hover: hover) { .pc-hit:hover { background: color-mix(in srgb, var(--accent, #3b82f6) 25%, transparent); } }
+.pc-x { grid-column: 2; display: flex; justify-content: space-between; gap: 8px; margin: 0 6px; font-size: .78rem; color: var(--text-muted, #7386a3); font-variant-numeric: tabular-nums; }
+.pc figcaption { margin-top: 6px; font-size: .82rem; }
+@media (forced-colors: active) { .pc-line { stroke: CanvasText; } .pc-end { background: CanvasText; } .pc-low { border-color: CanvasText; } }
 tr.removed { opacity: .6; }
 .vote button[aria-pressed="true"] { outline: 2px solid var(--on-accent, #fff); }
 .mod form { margin: 10px 0; }

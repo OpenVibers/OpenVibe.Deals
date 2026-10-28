@@ -21,6 +21,7 @@
 const seo = require('openvibe-publishing/seo');
 const { iso } = require('./values');
 const { attributionOf, hidesFromExtension } = require('./source-policy');
+const { priceTrend } = require('./price-trend');
 
 function createPublication({ config, store, reads, catalog }) {
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
@@ -69,12 +70,14 @@ function createPublication({ config, store, reads, catalog }) {
         const tally = await reads.tally(ids);
         const snap = await reads.lastSnapshot(root.id);
         const sources = await reads.sources(ids);
+        const observations = await reads.observations(ids);
         return {
             root,
             ids,
             store: await catalog.store(root.store_id),
             product: await catalog.product(root.product_id),
-            observations: await reads.observations(ids),
+            observations,
+            trend: priceTrend(observations),
             latest,
             freshness: freshness(latest, now),
             sources,
@@ -111,6 +114,13 @@ function createPublication({ config, store, reads, catalog }) {
         };
     }
 
+    /** The price over time as JSON: the stated prices, their times, and the change since the first. */
+    function trendDto(t) {
+        if (!t) return null;
+        const at = (p) => ({ price: p.price, observed_at: iso(p.at) });
+        return { currency: t.currency, observations: t.count, first: at(t.first), latest: at(t.latest), lowest: at(t.lowest), highest: at(t.highest), change: t.change, at_lowest: t.atLowest };
+    }
+
     /** The JSON representation (API and /d/:slug.json): the same facts as the page. */
     function offerDto(v) {
         const r = v.root;
@@ -130,6 +140,8 @@ function createPublication({ config, store, reads, catalog }) {
             freshness: v.freshness,
             attribution: v.attribution || null,
             observations: v.observations.map(observationDto),
+            // Lowest, highest and the change since first seen, in the latest price's currency only (never converted).
+            price_trend: trendDto(v.trend),
             sources: v.sources.map((s) => ({
                 id: s.id, kind: s.kind, listing: s.offer_id,
                 ref: s.ref_service === 'sources' ? { service: 'sources', type: 'item', id: s.ref_id, revision: s.ref_revision } : null,
