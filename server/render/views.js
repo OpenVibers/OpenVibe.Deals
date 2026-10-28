@@ -115,6 +115,54 @@ function observationTable(v, urls) {
 <tbody>${rows}</tbody></table>`;
 }
 
+const day = (ms) => when(ms).slice(0, 10);
+const pct = (n, max) => Math.round((n / max) * 1000) / 10;
+
+/**
+ * The price over time (domain/price-trend.js) above the history table: four tiles (latest, lowest,
+ * highest, change since first seen) and a step line, since a price holds until the next observation.
+ * Drawn on the server, readable without JavaScript; each point names its price and time on hover,
+ * and the table under it lists every observation.
+ */
+function priceChart(t) {
+    if (!t || t.count < 2) return '';
+    const cur = t.currency ? ` ${t.currency}` : '';
+    const span = t.latest.at - t.first.at;
+    const flat = t.highest.num === t.lowest.num;
+    const x = (p, i) => (span > 0 ? (p.at - t.first.at) / span : i / (t.count - 1)) * 1000;
+    const y = (n) => (flat ? 50 : 10 + ((t.highest.num - n) / (t.highest.num - t.lowest.num)) * 80);
+    const pts = t.points.map((p, i) => ({ p, x: Math.round(x(p, i) * 10) / 10, y: Math.round(y(p.num) * 10) / 10 }));
+    const d = pts.map((q, i) => (i === 0 ? `M${q.x} ${q.y}` : `H${q.x}V${q.y}`)).join('');
+    const dot = (q, cls, label) => html`<span class="${cls}" style="left:${pct(q.x, 1000)}%;top:${q.y}%"${label ? html` title="${label}"` : ''}></span>`;
+    const lowQ = pts.find((q) => q.p === t.lowest);
+    const endQ = pts[pts.length - 1];
+    // Hover targets name each point; past 60 points only the latest and the lowest do.
+    const hits = pts.length <= 60 ? pts.map((q) => dot(q, 'pc-hit', `${q.p.price}${cur} · ${when(q.p.at)}`)) : [];
+    const ch = t.change;
+    const sign = ch.amount > 0 ? '+' : ch.amount < 0 ? '−' : '';
+    const changeText = ch.amount === 0 ? 'No change' : `${sign}${Math.abs(ch.amount).toFixed(t.places)}${cur}`;
+    const changeNote = `${ch.amount !== 0 && ch.percent != null ? `${sign}${Math.abs(ch.percent)}% ` : ''}from ${t.first.price}${cur} on ${day(t.first.at)}`;
+    const summary = `Price over time${cur ? ` in${cur}` : ''}: ${t.first.price} on ${day(t.first.at)}, ${t.latest.price} on ${day(t.latest.at)}; lowest ${t.lowest.price} (${day(t.lowest.at)}), highest ${t.highest.price} (${day(t.highest.at)}), ${t.count} prices.`;
+    const tile = (label, value, note, cls = '') => html`<div class="pc-tile${cls}"><dt>${label}</dt><dd><strong>${value}</strong><span class="meta">${note}</span></dd></div>`;
+    return html`<figure class="pc" aria-label="Price over time">
+<dl class="pc-tiles">
+${tile('Latest', `${t.latest.price}${cur}`, day(t.latest.at))}
+${tile('Lowest', `${t.lowest.price}${cur}`, t.atLowest ? 'the lowest we have seen' : day(t.lowest.at), t.atLowest ? ' pc-best' : '')}
+${tile('Highest', `${t.highest.price}${cur}`, day(t.highest.at))}
+${tile('Since first seen', changeText, changeNote)}
+</dl>
+<div class="pc-plot">
+<div class="pc-y" aria-hidden="true">${flat ? html`<span style="top:50%">${t.latest.price}</span>` : html`<span style="top:10%">${t.highest.price}</span><span style="top:90%">${t.lowest.price}</span>`}</div>
+<div class="pc-area" role="img" aria-label="${summary}">
+<svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">${flat ? html`<line class="pc-grid" x1="0" x2="1000" y1="50" y2="50"/>` : html`<line class="pc-grid" x1="0" x2="1000" y1="10" y2="10"/><line class="pc-grid" x1="0" x2="1000" y1="90" y2="90"/>`}<path class="pc-line" d="${d}"/></svg>
+${hits}${lowQ !== endQ && !flat ? dot(lowQ, 'pc-dot pc-low', '') : ''}${dot(endQ, 'pc-dot pc-end', '')}
+</div>
+<div class="pc-x" aria-hidden="true"><span>${day(t.first.at)}</span><span>${day(t.latest.at)}</span></div>
+</div>
+<figcaption class="meta">A price holds until the next observation, and only as of its time. ${t.currency ? `Prices in other currencies are not compared.` : ''}</figcaption>
+</figure>`;
+}
+
 function sourceLabel(o) {
     if (o.source_kind === 'sources_item') return html`${o.source_key || 'source'}${safeHref(o.source_url) ? html` · <a href="${safeHref(o.source_url)}" rel="nofollow noopener">item</a>` : ''}`;
     if (o.origin === 'community' && o.source_kind === 'submission') return 'the submission';
@@ -163,6 +211,7 @@ ${r.seller ? html`<dt>Sold by</dt><dd>${urls.sellerPath ? html`<a href="${urls.s
 <dt>Posted</dt><dd>${timeEl(r.created_at)} ${r.origin === 'import' ? '(imported)' : '(by a member)'}</dd>
 </dl>
 <h2 id="history">Price history</h2>
+${priceChart(v.trend)}
 ${observationTable(v, urls)}
 <h2 id="sources">Sources</h2>
 <ul class="sources">${v.sources.map((s) => html`<li>${s.kind === 'sources_item' ? html`OpenVibe.Sources item <code>${s.ref_id}</code> from <code>${s.source_key || 'a source'}</code>${safeHref(s.url) ? html` — <a href="${safeHref(s.url)}" rel="nofollow noopener">original</a>` : ''}${s.retrieved_at ? html`, retrieved ${timeEl(s.retrieved_at)}` : ''}${s.license_note ? html` · ${s.license_note}` : ''}` : s.kind === 'submission' ? html`Submitted by a member ${timeEl(s.created_at)}` : html`Observations reported by a member`}${s.removed_at ? html` <span class="badge expired">removed: ${s.removed_reason}</span>` : ''}${s.offer_id !== r.id ? html` <span class="meta">(merged listing)</span>` : ''}</li>`)}</ul>
