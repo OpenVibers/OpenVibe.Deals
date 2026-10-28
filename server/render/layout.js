@@ -69,7 +69,7 @@ function renderPage(o) {
     // This site's own account links live in the shared navbar's account menu (the page's account
     // bar below is only for visitors without JavaScript).
     if (signedIn) nav.menu = { before: (viewer.staff ? [{ label: 'Moderation', href: '/mod', icon: 'fa-shield' }] : []) };
-    const footer = { service: 'deals', variant: 'full', mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };
+    const footer = { service: 'deals', variant: 'auto', path: o.path, mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };   // full on the front page only (Shared 4.19)
     const account = signedIn
         ? `${viewer.staff ? '<a href="/mod">Moderation</a> · ' : ''}<a href="/watches">Watches</a> · <a href="/auth/logout?next=${loginNext}">Sign out</a>`
         : `<a href="/auth/login?next=${loginNext}">Sign in with OpenVibe</a>`;
