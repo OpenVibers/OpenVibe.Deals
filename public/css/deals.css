@@ -171,3 +171,13 @@ code { overflow-wrap: anywhere; }
 .hm-card .price-none { font-size: .88rem; font-weight: 500; }
 /* A phone shows four cards a section (all eight stay in the page for crawlers and the "see all" link has the rest). */
 @media (max-width: 600px) { .hm-cards > li:nth-child(n+5) { display: none; } }
+
+/* A phone (the owner, 2026-10-28: heroes with wasted space and too much text): the numbers are one compact row of the
+   three that matter most, not three rows of tiles under the buttons. */
+@media (max-width: 640px) {
+    .hm-hero .hm-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .hm-hero .hm-stats li:nth-child(n+4) { display: none; }
+    .hm-hero .hm-stats a { padding: 10px 10px; border-radius: 12px; }
+    .hm-hero .hm-stats b { font-size: 1.25rem; }
+    .hm-hero .hm-stats span { font-size: .78rem; line-height: 1.25; }
+}
