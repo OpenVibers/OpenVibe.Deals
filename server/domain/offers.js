@@ -18,6 +18,7 @@ const {
     ApiError, newId, normalizeUrl, urlKey, domainOf, slugify, parseAmount, parseCurrency, parseEnum, parseInstant,
     text, longText, CONDITIONS, AVAILABILITY,
 } = require('./values');
+const { isDeal } = require('./price-trend');
 
 const FUTURE_SKEW_MS = 5 * 60 * 1000;
 
@@ -41,10 +42,10 @@ function createOffers(deps) {
                                   VALUES (@id, @offer_id, @kind, @ref_service, @ref_type, @ref_id, @ref_part, @ref_revision, @source_key, @url, @label,
                                       @license_note, @submitted_by, @retrieved_at, @now, @now)`),
         sourceByRef: db.prepare('SELECT * FROM deal_offer_sources WHERE kind = ? AND ref_service = ? AND ref_id = ? AND ref_part = ?'),
-        insertObs: db.prepare(`INSERT INTO deal_price_observations (id, offer_id, source_id, observed_at, recorded_at, price, price_num, currency, shipping,
-                                   shipping_num, shipping_note, condition, availability, origin, observed_by, source_revision, note)
-                               VALUES (@id, @offer_id, @source_id, @observed_at, @recorded_at, @price, @price_num, @currency, @shipping,
-                                   @shipping_num, @shipping_note, @condition, @availability, @origin, @observed_by, @source_revision, @note)`),
+        insertObs: db.prepare(`INSERT INTO deal_price_observations (id, offer_id, source_id, observed_at, recorded_at, price, price_num, list_price, list_price_num,
+                                   currency, shipping, shipping_num, shipping_note, condition, availability, origin, observed_by, source_revision, note)
+                               VALUES (@id, @offer_id, @source_id, @observed_at, @recorded_at, @price, @price_num, @list_price, @list_price_num,
+                                   @currency, @shipping, @shipping_num, @shipping_note, @condition, @availability, @origin, @observed_by, @source_revision, @note)`),
         obs: db.prepare('SELECT * FROM deal_price_observations WHERE id = ?'),
         log: db.prepare('INSERT INTO moderation_log (action, offer_id, target_id, actor, reason, before, after, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
         logFor: db.prepare(`SELECT * FROM moderation_log WHERE offer_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) OR target_id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb)) ORDER BY id`),
@@ -61,6 +62,8 @@ function createOffers(deps) {
         if ((price || shipping) && !currency) throw new ApiError(422, 'request.invalid', 'a price or shipping cost needs its currency (e.g. USD); Deals never assumes one');
         return {
             price: price ? price.text : null, price_num: price ? price.num : null,
+            // A person's report states no list price (only a crawled source does, migration 0008).
+            list_price: null, list_price_num: null,
             currency,
             shipping: shipping ? shipping.text : null, shipping_num: shipping ? shipping.num : null,
             shipping_note: text(input.shipping_note, { field: 'shipping_note', max: 200 }),
@@ -106,13 +109,22 @@ function createOffers(deps) {
         if (observedAt > now + FUTURE_SKEW_MS) throw new ApiError(422, 'request.invalid', 'observed_at is in the future');
         const row = {
             id: newId('dpo'), offer_id: offerId, source_id: sourceId, observed_at: Math.min(observedAt, now), recorded_at: now,
-            price: fields.price, price_num: fields.price_num, currency: fields.currency, shipping: fields.shipping, shipping_num: fields.shipping_num,
+            price: fields.price, price_num: fields.price_num, list_price: fields.list_price == null ? null : fields.list_price, list_price_num: fields.list_price_num == null ? null : fields.list_price_num,
+            currency: fields.currency, shipping: fields.shipping, shipping_num: fields.shipping_num,
             shipping_note: fields.shipping_note || null, condition: fields.condition || null, availability: fields.availability || null,
             origin, observed_by: observedBy, source_revision: sourceRevision, note: fields.note || null,
         };
         await q.insertObs.run(row);
         const obs = await q.obs.get(row.id);
-        await watches.onObservation(obs);
+        const watchEvents = await watches.onObservation(obs);
+        // A crawled offer is selected as a deal by its latest observation (price-trend.js isDeal):
+        // a stated list price, a price drop, or a person's matching price_below watch. The reason is
+        // kept on the offer where its labels are (migration 0008); a person's own observation does not
+        // select a crawled offer and leaves that decision alone.
+        if (origin === 'import' || origin === 'import_refresh') {
+            const reason = isDeal(await reads.observations([offerId]), Boolean(watchEvents && watchEvents.priceBelowMatched));
+            await db.prepare('UPDATE deal_offers SET deal_reason = ?, updated_at = ? WHERE id = ? AND deal_reason IS DISTINCT FROM ?').run(reason, now, offerId, reason);
+        }
         return obs;
     }
 

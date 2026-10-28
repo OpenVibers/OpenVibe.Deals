@@ -63,6 +63,10 @@ form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
 .price { font-size: 1.05rem; color: var(--warning-text, var(--warning, #f59e0b)); }
 .price.price-none { font-size: .8rem; font-weight: 500; color: var(--text-muted, #7386a3); }
 .price-line .as-of { font-size: .8rem; }
+/* The list price the page states, struck through, and what you save against it (only ever above the price). */
+.price-line .dl-list { font-size: .82rem; color: var(--text-muted, #7386a3); text-decoration-thickness: 1px; font-variant-numeric: tabular-nums; }
+.price-line .dl-saving { padding: 1px 7px; border-radius: 999px; font-size: .74rem; font-weight: 800; font-variant-numeric: tabular-nums;
+    color: var(--success-text, var(--success, #22c55e)); background: color-mix(in srgb, var(--success, #22c55e) 14%, transparent); }
 .attribution { margin: 0; font-size: .82rem; color: var(--text-muted, #7386a3); }
 .deal-item .meta { margin: 2px 0 0; font-size: .82rem; }
 @media (max-width: 600px) { .deal-item { grid-template-columns: 44px minmax(0, 1fr); padding: 12px; } .deal-item .score { height: 48px; } }
