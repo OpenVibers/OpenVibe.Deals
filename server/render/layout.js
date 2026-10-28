@@ -20,14 +20,16 @@ const SITE_NAME = 'OpenVibe.Deals';
 // One site summary, shared by /llms.txt, /llms-full.txt and the home page's ai-summary.
 const SITE_SUMMARY = 'Deals from DealNews and the OpenVibe community, by shop, category and end date, with price watches and crowdfunding search; every price has its source and the time it was seen.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+// The product's own places: the main ones carry an icon (phones get them as the bottom tab bar), the rest fold
+// into the navbar's More (Shared 4.22). Search is the navbar's magnifier; What shipped is the footer's.
 const NAV_LINKS = [
-    { label: 'Hot', href: '/hot' },
-    { label: 'New', href: '/new' },
-    { label: 'Categories', href: '/c' },
-    { label: 'Shops', href: '/at' },
-    { label: 'Crowdfunding', href: '/crowdfunding' },
+    { label: 'Hot', href: '/hot', icon: 'fa-bolt' },
+    { label: 'New', href: '/new', icon: 'fa-clock' },
+    { label: 'Categories', href: '/c', icon: 'fa-tag' },
+    { label: 'Shops', href: '/at', icon: 'fa-wallet' },
     { label: 'Submit', href: '/submit', icon: 'fa-plus' },
-    { label: 'Watches', href: '/watches', icon: 'fa-bell' },
+    { label: 'Crowdfunding', href: '/crowdfunding', icon: 'fa-heart', more: true },
+    { label: 'Watches', href: '/watches', icon: 'fa-bell', more: true },
 ];
 
 const hashes = new Map();
@@ -59,6 +61,7 @@ function renderPage(o) {
         service: 'deals',
         apiBase: NETWORK_URL,
         links: NAV_LINKS,
+        appBar: true,   // phones: the places with icons as the bottom tab bar (Shared 4.20)
         history: { type: 'page', title: o.title || SITE_NAME },
         silentLogin: `${o.config.baseUrl}/auth/login?silent=1&next={url}`,
         sessionUrl: '/auth/me',
