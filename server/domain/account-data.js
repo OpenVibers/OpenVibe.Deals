@@ -30,7 +30,7 @@ const TABLES = [
     { table: 'deal_offers', subject: 'disabled_by', file: null, erase: anonymize },
     { table: 'deal_offers', subject: 'merged_by', file: null, erase: anonymize },
     { table: 'deal_offer_sources', subject: 'submitted_by', file: null, erase: anonymize },
-    { table: 'deal_price_observations', subject: 'observed_by', file: 'price-reports.json', columns: ['id', 'offer_id', 'observed_at', 'price', 'currency', 'shipping', 'shipping_note', 'condition', 'availability', 'note'], order: 'observed_at', erase: anonymize },
+    { table: 'deal_price_observations', subject: 'observed_by', file: 'price-reports.json', columns: ['id', 'offer_id', 'observed_at', 'price', 'list_price', 'currency', 'shipping', 'shipping_note', 'condition', 'availability', 'note'], order: 'observed_at', erase: anonymize },
     { table: 'deal_products', subject: 'created_by', file: 'products.json', columns: ['id', 'slug', 'name', 'brand', 'category', 'description', 'created_at'], erase: anonymize },
     { table: 'deal_product_aliases', subject: 'created_by', file: null, erase: anonymize },
     { table: 'deal_flags', subject: 'reporter', file: 'reports.json', columns: ['id', 'offer_id', 'kind', 'reason', 'status', 'created_at'], erase: anonymize },

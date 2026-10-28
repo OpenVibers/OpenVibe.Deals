@@ -16,8 +16,10 @@
  * Item → offer mapping (values exactly as the source stated them; missing = null):
  *   kind offer    one offer: fields.price + fields.currency, availability / condition (schema.org
  *                 terms mapped to Deals' enums, unknown terms → null), valid_until → stated expiry,
- *                 seller → store name
- *   kind product  a product (resolved by gtin / mpn / sku / name) and one offer per stated offer
+ *                 seller → store name, and list_price when the page states one above the price in the
+ *                 same currency (jsonld@2's ListPrice/StrikethroughPrice/MSRP/SRP specification)
+ *   kind product  a product (resolved by gtin / mpn / sku / name) and one offer per stated offer;
+ *                 each offer's own list_price is kept with its price (jsonld@2)
  *   kind article  (RSS/Atom) one offer with the title and link; the price is NOT parsed out of the
  *                 headline — it stays "not stated" until a structured source or a person states it. A deal
  *                 feed's own offer elements (Sources feed@2: DealNews' price, currency, retailer and end date)
@@ -48,6 +50,7 @@ const {
     normalizeUrl, verbatimUrl, urlKey, parseAmount, SCHEMA_AVAILABILITY, SCHEMA_CONDITION, iso,
 } = require('./values');
 const { keepsLinksVerbatim } = require('./source-policy');
+const { isDeal } = require('./price-trend');
 
 const CURSOR = 'sources.deals.after';
 
@@ -90,8 +93,16 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
     /** Stated fields → observation fields. A malformed value is null, never repaired or guessed. */
     function obsFields(f = {}) {
         const price = amount(f.price);
+        const currency = currencyOf(f.currency);
+        const list = amount(f.list_price);
+        // Sources' jsonld@2 already drops a list price in another currency; Deals keeps its own rule
+        // too, for any source that states one. list_price_currency is only present when a source makes
+        // it explicit; otherwise the list price is in the offer's own currency.
+        const listCurrency = f.list_price_currency === undefined ? currency : currencyOf(f.list_price_currency);
+        const listOk = Boolean(list && price && currency && listCurrency === currency && list.num > price.num);
         return {
-            price: price ? price.text : null, price_num: price ? price.num : null, currency: currencyOf(f.currency),
+            price: price ? price.text : null, price_num: price ? price.num : null, currency,
+            list_price: listOk ? list.text : null, list_price_num: listOk ? list.num : null,
             shipping: null, shipping_num: null, shipping_note: null,
             condition: SCHEMA_CONDITION[f.condition] || null,
             availability: SCHEMA_AVAILABILITY[f.availability] || null,
@@ -315,4 +326,4 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
     };
 }
 
-module.exports = { createImporter, CURSOR };
+module.exports = { createImporter, CURSOR, isDeal };

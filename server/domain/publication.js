@@ -21,7 +21,7 @@
 const seo = require('openvibe-publishing/seo');
 const { iso } = require('./values');
 const { attributionOf, hidesFromExtension } = require('./source-policy');
-const { priceTrend } = require('./price-trend');
+const { priceTrend, listPriceFields } = require('./price-trend');
 
 function createPublication({ config, store, reads, catalog }) {
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
@@ -107,18 +107,26 @@ function createPublication({ config, store, reads, catalog }) {
     function observationDto(o) {
         return {
             id: o.id, observed_at: iso(o.observed_at), recorded_at: iso(o.recorded_at),
-            price: o.price, currency: o.currency, shipping: o.shipping, shipping_note: o.shipping_note,
+            price: o.price, currency: o.currency, ...listPriceFields(o), shipping: o.shipping, shipping_note: o.shipping_note,
             condition: o.condition, availability: o.availability, origin: o.origin,
             observed_by: o.observed_by || null, listing: o.offer_id,
             source: { id: o.source_id, kind: o.source_kind, ref: o.ref_service === 'sources' ? { service: 'sources', type: 'item', id: o.ref_id, revision: o.source_revision } : null, key: o.source_key || null, url: o.source_url || null },
         };
     }
 
-    /** The price over time as JSON: the stated prices, their times, and the change since the first. */
+    /**
+     * The price over time as JSON: the stated prices, their times, and the change since the first.
+     * The latest observation also carries its list price and the saving (all four fields null when
+     * the observation states no usable list price).
+     */
     function trendDto(t) {
         if (!t) return null;
         const at = (p) => ({ price: p.price, observed_at: iso(p.at) });
-        return { currency: t.currency, observations: t.count, first: at(t.first), latest: at(t.latest), lowest: at(t.lowest), highest: at(t.highest), change: t.change, at_lowest: t.atLowest };
+        return {
+            currency: t.currency, observations: t.count, first: at(t.first),
+            latest: { ...at(t.latest), ...listPriceFields(t.latest) },
+            lowest: at(t.lowest), highest: at(t.highest), change: t.change, at_lowest: t.atLowest,
+        };
     }
 
     /** The JSON representation (API and /d/:slug.json): the same facts as the page. */
@@ -127,6 +135,8 @@ function createPublication({ config, store, reads, catalog }) {
         return {
             id: r.id, slug: r.slug, url: abs(offerPath(r)), title: r.title, description: r.description,
             link: r.url, status: r.status, category: r.category, origin: r.origin, submitted_by: r.submitted_by,
+            // Why a crawled offer was selected as a deal (migration 0008); null for community offers.
+            deal_reason: r.deal_reason || null,
             text_origin: r.text_origin, review_state: r.review_state, ai_summary: r.ai_summary,
             expires_at: iso(r.expires_at), expired_at: iso(r.expired_at), expired_reason: r.expired_reason,
             disabled_reason: r.status === 'disabled' ? r.disabled_reason : null,

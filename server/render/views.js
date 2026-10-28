@@ -9,6 +9,7 @@
  */
 const { html, raw, renderMarkdown, paginationHtml, breadcrumbsHtml } = require('openvibe-publishing/ssr');
 const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/values');
+const { savingOf } = require('../domain/price-trend');
 
 const pad = (n) => String(n).padStart(2, '0');
 function when(ms) {
@@ -37,6 +38,14 @@ function shippingText(o) {
     if (!o) return '';
     if (o.shipping != null) return `+ ${o.shipping} ${o.currency || ''} shipping`.trim();
     return o.shipping_note || '';
+}
+
+/** The stated list price and the saving, only beside the price they belong to (no styling: the site's CSS does that). */
+function listPriceLine(o) {
+    if (!o || o.list_price == null || o.list_price_num == null) return '';
+    const saving = savingOf(o);
+    if (saving.pct == null) return '';
+    return html` <s class="dl-list" data-list-price="${o.list_price}">${o.list_price}${o.currency ? ` ${o.currency}` : ''}</s> <span class="dl-saving">−${saving.pct}%</span>`;
 }
 
 function freshnessBadge(f, now) {
@@ -68,7 +77,7 @@ function latestLine(v) {
     const o = v.latest;
     // A price nobody stated is said quietly: a headline-only source (DealNews' feed) states its price in the title.
     const stated = o && o.price != null;
-    return html`<p class="price-line"><strong class="price${stated ? '' : ' price-none'}" data-price="${stated ? o.price : ''}">${priceText(o)}</strong>
+    return html`<p class="price-line"><strong class="price${stated ? '' : ' price-none'}" data-price="${stated ? o.price : ''}">${priceText(o)}</strong>${listPriceLine(o)}
 ${o && shippingText(o) ? html` <span class="meta">${shippingText(o)}</span>` : ''}
 ${o && o.availability ? html` · <span class="meta">${AVAILABILITY_LABEL[o.availability]}</span>` : ''}
 ${o ? html` <span class="meta as-of">as of ${timeEl(o.observed_at)}</span>` : ''} ${freshnessBadge(v.freshness, v.now)}</p>`;

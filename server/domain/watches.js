@@ -94,7 +94,12 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
         return false;
     }
 
-    /** Inside the observation's transaction. Returns the envelopes emitted. */
+    /**
+     * Inside the observation's transaction. Returns the envelopes emitted; the array's
+     * priceBelowMatched says whether any active price_below watch matched this observation (even
+     * when it did not emit again because it had already notified a lower price) — the deal
+     * selection reads it (server/domain/offers.js recordObservation).
+     */
     async function onObservation(obs) {
         const offer = await reads.get(obs.offer_id);
         const v = await publication.offerView(offer);
@@ -106,6 +111,7 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
             if (obs.observed_by && obs.observed_by === w.subject) continue;
             if (v.root.submitted_by && v.root.submitted_by === w.subject && obs.origin === 'community') continue;
             if (!matches(w, v, obs, words)) continue;
+            if (w.kind === 'price_below') out.priceBelowMatched = true;
             const prior = await q.priorForGroup.all(w.id, JSON.stringify(v.ids));
             if (w.kind !== 'price_below' && prior.length) continue;
             if (w.kind === 'price_below' && prior.some((p) => p.currency === obs.currency && p.price_num != null && p.price_num <= obs.price_num)) continue;
