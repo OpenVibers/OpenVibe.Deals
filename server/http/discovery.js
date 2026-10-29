@@ -93,6 +93,7 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
             '# openvibe.deals automated-consumer policy: search engines and AI crawlers are welcome to read',
             '# public deal, product and store pages, feeds and sitemaps. Prices are observations with times;',
             '# read the "as of" time and the JSON twin (<deal URL>.json) rather than assuming a price is current.',
+            '# Agent manifest: https://openvibe.deals/.well-known/agent.json; every public page has a .md twin.',
             '# Forms, sign-in, moderation and the API are not for crawling. Pages decide their own',
             '# indexability (meta robots / X-Robots-Tag): stale or expired deals are noindex. A Disallow is not a noindex.',
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/submit', '/watches', '/mod', '/search', '/auth/', '/api/', '/internal/'] }),
