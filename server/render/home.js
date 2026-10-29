@@ -122,7 +122,7 @@ function homePage(d, urls) {
 <h1>Today's deals,<span class="sc-accent"> with the time every price was seen</span></h1>
 <p class="sc-hero-lede">Deals from DealNews' editors and from the OpenVibe community, by shop, category and end date. Every price says when it was seen, and an old one says it may be gone.</p>
 <form class="hm-search" action="/search" method="get" role="search"><label class="sr" for="hm-q">Search deals</label><input id="hm-q" name="q" type="search" maxlength="100" placeholder="Search deals, like air fryer or lululemon"><button type="submit">Search</button></form>
-<div class="sc-actions"><a class="sc-btn sc-primary" href="/new">See the newest deals</a><a class="sc-btn" href="/watches">Watch a price</a><a class="sc-btn" href="/submit">Post a deal</a></div>
+<div class="sc-actions"><a class="sc-btn sc-primary" href="/new">See the newest deals</a><a class="sc-btn" href="/submit">Post a deal</a></div>
 </div>
 <div class="sc-hero-aside">${stats([
         { n: d.stats.active, label: 'active deals', href: '/new' },
@@ -148,8 +148,7 @@ ${under ? section({ id: 'hm-under', title: `Under ${under}`, lede: `Deals with a
 ${section({ id: 'hm-categories', title: 'Browse by category', lede: 'Categories as each deal\'s source names them, the most deals first.', more: { href: '/c', label: 'All categories' }, body: chips(catLinks, 'deal') })}
 ${section({ id: 'hm-shops', title: 'Shop by store', lede: 'Where the deals are sold, as their sources name the shop.', more: { href: '/at', label: `All ${count(d.sellers.length)} shops` }, body: chips(shopLinks, 'deal') })}
 ${section({ id: 'hm-crowdfunding', title: 'Crowdfunding', lede: 'Open-source and community campaigns from Open Collective with what they received, plus one search across Kickstarter, Indiegogo, GoFundMe and more.', more: { href: '/crowdfunding', label: 'Search crowdfunding' }, body: d.campaigns.length ? html`<ol class="cf-grid hm-cf">${d.campaigns.map(campaignCard)}</ol>` : '' })}
-${raw(showcase.features({
-        title: 'How it works',
+<details class="hm-fold"><summary>How it works<span>prices, votes, shops, watches</span></summary>${raw(showcase.features({
         lede: 'A deal is a link, a title and every price anyone saw for it, each with its source and time.',
         items: [
             { icon: 'ov:history', title: 'Prices with their time', text: 'Each deal keeps every price it was seen at, newest first, each with its source. Nothing is called current without a fresh one.', href: '/new' },
@@ -157,10 +156,9 @@ ${raw(showcase.features({
             { icon: 'ov:search', title: 'By shop and category', text: 'Every deal is filed under the shop that sells it and the category its source gives it.', href: '/at' },
             { icon: 'ov:bell', title: 'Watches and saved searches', text: 'Watch words, a product or a price limit for new prices that match, or save a search to run again.', href: '/watches' },
         ],
-    }))}
+    }))}</details>
 ${faq(d.faq)}
-${raw(showcase.network({ service: 'deals' }))}
-${raw(showcase.cta({ title: 'Know a good deal?', text: 'Post it with the price you see and the time is recorded with it. People vote, and the best rise to the top.', actions: [{ label: 'Post a deal', href: '/submit', primary: true }, { label: 'Find coupon codes on OpenVibe.Coupons', href: 'https://openvibe.coupons/' }] }))}`;
+${raw(showcase.network({ service: 'deals' }))}`;
 }
 
 module.exports = { homePage, faqItems, faqJsonLd, card, money };
