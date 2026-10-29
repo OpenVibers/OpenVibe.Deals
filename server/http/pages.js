@@ -31,7 +31,8 @@ const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
 const cache = require('openvibe-shared/cache-policy');
 const ssr = require('openvibe-publishing/ssr');
-const { renderPage, SITE_SUMMARY } = require('../render/layout');
+const { renderPage, SITE_SUMMARY, oneGraph } = require('../render/layout');
+const sharedSeo = require('openvibe-shared/seo');
 const views = require('../render/views');
 const home = require('../render/home');
 const { csrfToken, checkCsrf } = require('../auth/forms');
@@ -205,11 +206,14 @@ function createPages(ctx) {
             decision: pageDecision('/', { empty: total === 0 }),
             canonical: seo.canonicalUrl(config.baseUrl, '/'),
             feeds: FEEDS,
-            jsonLd: [
-                { '@context': 'https://schema.org', '@type': 'WebSite', name: 'OpenVibe.Deals', url: publication.abs('/'), potentialAction: { '@type': 'SearchAction', target: `${publication.abs('/search')}?q={q}`, 'query-input': 'required name=q' } },
-                ...(listed.length ? [{ '@context': 'https://schema.org', '@type': 'ItemList', name: 'Deals on OpenVibe.Deals', itemListElement: listed.map((v, i) => ({ '@type': 'ListItem', position: i + 1, url: publication.abs(publication.offerPath(v.root)), name: v.root.title })) }] : []),
+            // One JSON-LD script for the page: every node in one @graph.
+            jsonLd: oneGraph([
+                { '@type': 'WebSite', name: 'OpenVibe.Deals', url: publication.abs('/'), potentialAction: { '@type': 'SearchAction', target: `${publication.abs('/search')}?q={q}`, 'query-input': 'required name=q' } },
+                ...(listed.length ? [{ '@type': 'ItemList', name: 'Deals on OpenVibe.Deals', itemListElement: listed.map((v, i) => ({ '@type': 'ListItem', position: i + 1, url: publication.abs(publication.offerPath(v.root)), name: v.root.title })) }] : []),
                 home.faqJsonLd(faq),
-            ],
+                // The publisher of the WebSite above, so its @id resolves on this page too.
+                sharedSeo.jsonLd.organization(),
+            ]),
             bodyClass: 'home',
             body: home.homePage({
                 empty: total === 0, freshnessHours: Math.round(config.freshnessMs / 3600000), faq,
@@ -281,7 +285,7 @@ function createPages(ctx) {
                 decision: v.decision,
                 canonical,
                 type: 'website',
-                jsonLd: [publication.offerJsonLd(v), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, ...(v.store ? [{ name: v.store.name || v.store.domain, url: publication.abs(publication.storePath(v.store)) }] : []), { name: r.title, url: canonical }])],
+                jsonLd: oneGraph([publication.offerJsonLd(v), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, ...(v.store ? [{ name: v.store.name || v.store.domain, url: publication.abs(publication.storePath(v.store)) }] : []), { name: r.title, url: canonical }])]),
                 body: views.offerPage({
                     v, dto: publication.offerDto(v), viewer, csrf: person ? csrfToken(config, viewer) : '', myVote: person ? await votes.mine(viewer.subject, r) : 0,
                     comments: c, mergedComments, canEdit: access.canEdit(viewer, r), isMod,
@@ -388,7 +392,7 @@ function createPages(ctx) {
                 title: `${product.name} — price comparison`,
                 description: `Offers for ${product.name}, each with the time its price was observed.`,
                 decision: pv.decision, canonical,
-                jsonLd: [publication.productJsonLd(pv), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, { name: product.name, url: canonical }])],
+                jsonLd: oneGraph([publication.productJsonLd(pv), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, { name: product.name, url: canonical }])]),
                 body: views.productPage({ pv, urls }),
             },
         };

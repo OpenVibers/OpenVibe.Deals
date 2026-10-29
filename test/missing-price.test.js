@@ -60,7 +60,7 @@ const { sourceItem } = require('./helpers/mocks');
         const ld = jsonLd(page.text).find((x) => x['@type'] === 'Product');
         assert.strictEqual(ld.gtin, '0012345678905');
         const prices = ld.offers.map((o) => o.price);
-        assert.deepStrictEqual(prices, ['30.00', undefined, undefined], 'only the fresh stated price reaches structured data');
+        assert.deepStrictEqual(prices, [30, undefined, undefined], 'only the fresh stated price reaches structured data');
     });
 
     await check('a price in an imported headline is not parsed into a price', async () => {

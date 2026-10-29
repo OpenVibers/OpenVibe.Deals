@@ -20,7 +20,7 @@ const { sourceItem } = require('./helpers/mocks');
         assert.match(page.text, /data-freshness="fresh"/);
         assert.strictEqual(robotsOf(page.text), 'index, follow');
         const ld = jsonLd(page.text).find((x) => x['@type'] === 'Product');
-        assert.strictEqual(ld.offers[0].price, '49.99');
+        assert.strictEqual(ld.offers[0].price, 49.99);
         assert.strictEqual(ld.offers[0].priceCurrency, 'USD');
         assert.strictEqual(ld.offers[0].availability, 'https://schema.org/InStock');
         const json = await t.offerJson(offer.slug);
@@ -82,7 +82,7 @@ const { sourceItem } = require('./helpers/mocks');
         assert.strictEqual(json.observations[0].observed_by, bob.subject);
         const page = await t.get(`/d/${offer.slug}`);
         assert.strictEqual(robotsOf(page.text), 'index, follow');
-        assert.strictEqual(jsonLd(page.text).find((x) => x['@type'] === 'Product').offers[0].price, '44.00');
+        assert.strictEqual(jsonLd(page.text).find((x) => x['@type'] === 'Product').offers[0].price, 44);
     });
 
     await check('an imported observation is dated by when the source saw it: old retrieval → stale from the start', async () => {

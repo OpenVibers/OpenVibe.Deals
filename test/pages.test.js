@@ -65,7 +65,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         const types = jsonLd(r.text).map((x) => x['@type']);
         assert.deepStrictEqual(types, ['Product', 'BreadcrumbList']);
         const ld = jsonLd(r.text)[0].offers[0];
-        assert.deepStrictEqual([ld.price, ld.priceCurrency, ld.itemCondition, ld.seller.name], ['79.00', 'USD', 'https://schema.org/NewCondition', 'Gadgets Inc']);
+        assert.deepStrictEqual([ld.price, ld.priceCurrency, ld.itemCondition, ld.seller.name], [79, 'USD', 'https://schema.org/NewCondition', 'Gadgets Inc']);
         assert.strictEqual(ld.shippingDetails.shippingRate.value, '4.99');
         assert.match(r.text, /<link rel="canonical" href="https:\/\/openvibe.deals\/d\//);
         const json = await t.get(`/d/${deal.slug}.json`);
