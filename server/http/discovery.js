@@ -7,13 +7,13 @@
  *   GET /llms.txt               orientation for language models
  *   GET /llms-full.txt          the same header plus a short summary of every indexable deal (never
  *                               the full source text)
- *   GET /sitemap.xml            sitemap index over the sections below
- *   GET /sitemaps/offers.xml    offers the gate calls indexable RIGHT NOW (fresh observation, not
- *                               expired, reviewed where review is needed); lastmod = the latest
- *                               observation or edit, never "now"
- *   GET /sitemaps/products.xml  product pages with at least one fresh offer
- *   GET /sitemaps/pages.xml     the front page and the lists: hot, new, ending soon, picks, every category and shop,
+ *   GET /sitemap.xml            sitemap index over the children below, each at most SITEMAP_CHILD_MAX URLs
+ *   GET /sitemap-pages.xml      the front page and the lists: hot, new, ending soon, picks, every category and shop,
  *                               crowdfunding (an empty list is noindex and left out)
+ *   GET /sitemap-<n>.xml        the catalog, split in SITEMAP_CHILD_MAX-URL chunks in one stable order: offers the gate
+ *                               calls indexable RIGHT NOW (fresh observation, not expired, reviewed where review is
+ *                               needed; lastmod = the latest observation or edit, never "now"), then product pages with
+ *                               at least one fresh offer. A chunk number past the last chunk is 404.
  *
  * Built from the database, never from the viewer (the offer and product lists at most once per
  * config.sitemapTtlMs, shared by concurrent readers). Stale, expired, disabled, merged and unreviewed
@@ -27,6 +27,18 @@ const { SITE_SUMMARY } = require('../render/layout');
 
 // Offers or products whose page view a list build reads at once (the pool has a handful of connections for everyone).
 const VIEWS_PARALLEL = 8;
+
+// URLs in one sitemap file. The catalog keeps growing, so the index names one child per chunk instead of serving one
+// unbounded <urlset> that would eventually pass a crawler's limit.
+const SITEMAP_CHILD_MAX = 10000;
+
+/** entries in their given order, SITEMAP_CHILD_MAX at a time; an empty catalog still has one (empty) chunk. */
+function chunks(entries) {
+    if (!entries.length) return [[]];
+    const out = [];
+    for (let i = 0; i < entries.length; i += SITEMAP_CHILD_MAX) out.push(entries.slice(i, i + SITEMAP_CHILD_MAX));
+    return out;
+}
 
 /** fn over items, `limit` at a time; results in the items' order. */
 async function mapLimit(items, limit, fn) {
@@ -88,6 +100,22 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
         return lists.map((l) => ({ loc: abs(l.path), lastmod: l.lastmod || null, decision: decide(l.path, l.empty) }));
     }
 
+    /** The catalog the chunks split: every indexable offer, then every indexable product — the order the site has used. */
+    async function catalogEntries() {
+        const indexable = (list) => list.filter((e) => e.decision.indexable);
+        return [...indexable(await offerEntries()), ...indexable(await productEntries())];
+    }
+
+    /** The newest lastmod among entries, as the index's own date for that child; none is invented when there is none. */
+    const newestLastmod = (entries) => {
+        let newest = 0;
+        for (const e of entries) {
+            const t = e.lastmod ? new Date(e.lastmod).getTime() : 0;
+            if (t > newest) newest = t;
+        }
+        return newest ? { lastmod: new Date(newest).toISOString() } : {};
+    };
+
     router.get('/robots.txt', (_req, res) => {
         const body = [
             '# openvibe.deals automated-consumer policy: search engines and AI crawlers are welcome to read',
@@ -115,7 +143,7 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
                 { title: 'Feeds', links: [{ title: 'RSS', url: abs('/feed.xml') }, { title: 'Atom', url: abs('/atom.xml') }, { title: 'JSON Feed', url: abs('/feed.json') }] },
                 { title: 'Data', links: [
                     { title: 'Deal JSON', url: abs('/new'), note: 'append .json to any deal URL (/d/<slug>.json)' },
-                    { title: 'Product JSON', url: abs('/sitemaps/products.xml'), note: 'append .json to any product URL (/p/<slug>.json)' },
+                    { title: 'Product JSON', url: abs('/sitemap.xml'), note: 'product pages are in the sitemap; append .json to any product URL (/p/<slug>.json)' },
                 ] },
             ],
         }));
@@ -143,17 +171,23 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     });
 
     router.get('/sitemap.xml', async (_req, res) => {
-        const o = (await offerEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
-        const p = (await productEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
-        const g = (await pageEntries()).filter((e) => e.decision.indexable).map((e) => e.lastmod).filter(Boolean);
-        const iso = (list) => (list.length ? { lastmod: new Date(Math.max(...list)).toISOString() } : {});
-        xml(res, seo.sitemapIndex([{ loc: abs('/sitemaps/pages.xml'), ...iso(g) }, { loc: abs('/sitemaps/offers.xml'), ...iso(o) }, { loc: abs('/sitemaps/products.xml'), ...iso(p) }]));
+        const pages = (await pageEntries()).filter((e) => e.decision.indexable);
+        const catalog = chunks(await catalogEntries());
+        const children = [
+            { loc: abs('/sitemap-pages.xml'), ...newestLastmod(pages) },
+            ...catalog.map((part, i) => ({ loc: abs(`/sitemap-${i}.xml`), ...newestLastmod(part) })),
+        ];
+        xml(res, sharedSeo.sitemapIndexXml(children));
     });
 
-    router.get('/sitemaps/pages.xml', async (_req, res) => xml(res, seo.sitemap(await pageEntries()).files[0]));
+    router.get('/sitemap-pages.xml', async (_req, res) => xml(res, seo.sitemap(await pageEntries()).files[0]));
 
-    router.get('/sitemaps/offers.xml', async (_req, res) => xml(res, seo.sitemap(await offerEntries()).files[0]));
-    router.get('/sitemaps/products.xml', async (_req, res) => xml(res, seo.sitemap(await productEntries()).files[0]));
+    // /sitemap-<n>.xml: the nth chunk of the catalog. Past the last chunk the number does not exist, so 404.
+    router.get(/^\/sitemap-(0|[1-9]\d{0,5})\.xml$/, async (req, res, next) => {
+        const part = chunks(await catalogEntries())[Number(req.params[0])];
+        if (!part) return next();
+        xml(res, seo.sitemap(part).files[0]);
+    });
 
     return router;
 }

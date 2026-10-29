@@ -46,7 +46,7 @@ const { sourceItem } = require('./helpers/mocks');
         assert.strictEqual(json.freshness.state, 'stale');
         assert.deepStrictEqual(json.indexability.reasons.map((r) => r.code), ['stale_price']);
         assert.strictEqual(json.latest_observation.price, '49.99', 'history is kept, with its time');
-        const sm = await t.get('/sitemaps/offers.xml');
+        const sm = await t.get('/sitemap-0.xml');
         assert.ok(!sm.text.includes(offer.slug));
         const list = await t.get('/');
         assert.match(list.text, /data-freshness="stale"/);

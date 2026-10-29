@@ -256,7 +256,7 @@ const { signDelivery, signDeliveryHeaders } = require('openvibe-sdk/events');
         await t.ctx.importer.pull();
         assert.deepStrictEqual([(await byUrl(link)).category, (await byUrl(link)).staff_pick], ['Electronics', false]);
         assert.strictEqual((await t.get('/c/tvs')).status, 404, 'an empty category is gone');
-        const sm = await t.get('/sitemaps/pages.xml');
+        const sm = await t.get('/sitemap-pages.xml');
         assert.ok(sm.text.includes('<loc>https://openvibe.deals/c/electronics</loc>') && sm.text.includes('<loc>https://openvibe.deals/at/amazon</loc>'));
     });
 
