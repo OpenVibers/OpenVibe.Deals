@@ -174,4 +174,18 @@ code { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .hm-card, .hm-stats a { transition: none; } }
 .hm-card .price-none { font-size: .88rem; font-weight: 500; }
 /* A phone shows four cards a section (all eight stay in the page for crawlers and the "see all" link has the rest). */
-@media (max-width: 600px) { .hm-cards > li:nth-child(n+5) { display: none; } }
+/* Phones (2026-10-29): a taste and a door. Each deal list and the campaigns are one row that scrolls sideways (every card
+   is still there), the clouds show ten each (all are a link away), the figures are one strip. */
+.hm-fold { margin: 48px 0 0; font-family: var(--ov-font, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif); border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); }
+.hm-fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 16px; cursor: pointer; font-weight: 700; list-style: none; }
+.hm-fold > summary::-webkit-details-marker { display: none; }
+.hm-fold > summary span { color: var(--text-muted, #7386a3); font-weight: 600; font-size: .86rem; }
+.hm-fold > summary:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: -2px; border-radius: 14px; }
+.hm-fold .sc-sec { margin: 0; max-width: none; padding: 0 16px 14px; }
+@media (max-width: 600px) {
+  .hm-cards, .hm-cf, .hm-stats { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 16px; scrollbar-width: none; gap: 10px; margin-left: -16px; margin-right: -16px; padding: 0 16px 4px; }
+  .hm-cards::-webkit-scrollbar, .hm-cf::-webkit-scrollbar, .hm-stats::-webkit-scrollbar { display: none; }
+  .hm-cards > li, .hm-cf > li { flex: 0 0 82%; scroll-snap-align: start; }
+  .hm-stats > li { flex: 0 0 auto; width: 132px; scroll-snap-align: start; }
+  .hm-chips > li:nth-child(n+11) { display: none; }
+}
