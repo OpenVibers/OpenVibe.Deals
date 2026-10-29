@@ -138,7 +138,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.strictEqual(e.length, 1);
         assert.strictEqual(e[0].payload.reason, 'submitter');
         assert.ok(!(await t.get('/')).text.includes(deal.slug));
-        assert.ok(!(await t.get('/sitemaps/offers.xml')).text.includes(deal.slug));
+        assert.ok(!(await t.get('/sitemap-0.xml')).text.includes(deal.slug));
     });
 
     await check('a stated end time expires the deal on the worker tick; an unknown end never expires by itself', async () => {
@@ -204,9 +204,9 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         assert.match(llms.text, /OpenVibe.Deals/);
         assert.match(llms.text, /never 0/);
         const idx = await t.get('/sitemap.xml');
-        assert.match(idx.text, /sitemaps\/offers.xml/);
-        assert.match(idx.text, /sitemaps\/products.xml/);
-        const offers = await t.get('/sitemaps/offers.xml');
+        assert.match(idx.text, /<loc>https:\/\/openvibe\.deals\/sitemap-pages\.xml<\/loc>/);
+        assert.match(idx.text, /<loc>https:\/\/openvibe\.deals\/sitemap-0\.xml<\/loc>/);
+        const offers = await t.get('/sitemap-0.xml');
         const fresh = (await t.ctx.store.db.prepare("SELECT slug FROM deal_offers WHERE title = 'Hardcover novel'").get()).slug;
         assert.ok(offers.text.includes(fresh));
         assertSitemapLastmods(offers.text);
@@ -214,13 +214,13 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         const observation = await t.ctx.store.db.prepare('SELECT MAX(observed_at) AS time FROM deal_price_observations WHERE offer_id = ?').get(offerRow.id);
         const expected = new Date(Math.max(offerRow.updated_at, observation.time || 0)).toISOString().slice(0, 10);
         assert.ok(offers.text.includes(`<lastmod>${expected}</lastmod>`));
-        const products = (await t.get('/sitemaps/products.xml')).text;
-        assertSitemapLastmods(products);
-        // An index entry carries its map's newest lastmod; an empty map has no honest date and none is invented.
-        const offersEntry = /<sitemap><loc>[^<]*\/sitemaps\/offers\.xml<\/loc>(<lastmod>[^<]+<\/lastmod>)?<\/sitemap>/.exec(idx.text);
-        assert.ok(offersEntry && offersEntry[1], idx.text);
-        if (!products.includes('<url>')) assert.ok(/<loc>[^<]*\/sitemaps\/products\.xml<\/loc><\/sitemap>/.test(idx.text), 'no lastmod for an empty map');
-        else assertSitemapLastmods(idx.text, 'sitemap');
+        // An index entry carries its child's newest lastmod; an empty child has no honest date and none is invented.
+        const catalogEntry = /<sitemap><loc>[^<]*\/sitemap-0\.xml<\/loc>(<lastmod>[^<]+<\/lastmod>)?<\/sitemap>/.exec(idx.text);
+        assert.ok(catalogEntry, idx.text);
+        if (!offers.text.includes('<url>')) assert.ok(!catalogEntry[1], 'no lastmod for an empty map');
+        else assert.ok(catalogEntry[1], 'the child\'s newest lastmod');
+        assertSitemapLastmods(idx.text, 'sitemap');
+        assert.strictEqual((await t.get('/sitemap-1.xml')).status, 404, 'a chunk number that does not exist');
         assert.ok(!offers.text.includes(timed.slug), 'expired');
         assert.ok(!offers.text.includes(deal.slug), 'expired');
     });
@@ -235,7 +235,7 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         const urls = [...full.text.matchAll(/^URL: (\S+)$/gm)].map((m) => m[1]);
         assert.ok(urls.length >= 1, 'lists an indexable deal');
         // The same gate as the sitemap: every listed URL is one the sitemap also lists as indexable.
-        const locs = new Set([...(await t.get('/sitemaps/offers.xml')).text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
+        const locs = new Set([...(await t.get('/sitemap-0.xml')).text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
         for (const u of urls) assert.ok(locs.has(u), `only indexable deals: ${u}`);
         assert.ok(!urls.some((u) => u.endsWith(`/d/${timed.slug}`)), 'an expired deal stays out');
         assert.ok(!urls.some((u) => u.endsWith(`/d/${deal.slug}`)), 'an expired deal stays out');
@@ -260,8 +260,8 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         const old = await t.get('/?page=2');
         assert.deepStrictEqual([old.status, old.headers.get('location')], [301, '/hot?page=2']);
         for (const p of ['/hot', '/ending', '/picks', '/c']) assert.strictEqual((await t.get(p)).status, 200, p);
-        assert.ok((await t.get('/sitemap.xml')).text.includes('<loc>https://openvibe.deals/sitemaps/pages.xml</loc>'));
-        assert.ok((await t.get('/sitemaps/pages.xml')).text.includes('<loc>https://openvibe.deals/</loc>'));
+        assert.ok((await t.get('/sitemap.xml')).text.includes('<loc>https://openvibe.deals/sitemap-pages.xml</loc>'));
+        assert.ok((await t.get('/sitemap-pages.xml')).text.includes('<loc>https://openvibe.deals/</loc>'));
     });
 
     await check('operations: health, readiness, release.json, metrics (loopback), legal pages', async () => {

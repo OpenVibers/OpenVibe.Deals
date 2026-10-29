@@ -74,7 +74,7 @@ gauges to `telemetry_samples` every minute and on stop, and deletes rows older t
 | `GET/POST /watches` | watches and saved searches; `POST /watches/:id/delete` |
 | `GET /mod` | moderators: open flags (incl. vote rings), text waiting for review, possible duplicates; `POST /mod/offers/:slug/(merge\|unmerge\|disable\|enable\|review\|expire)`, `POST /mod/flags/:id/(resolve\|dismiss)` |
 | `GET /feed.xml`, `/atom.xml`, `/feed.json` | newest active deals, with "as of" times and stable ids `deals:offer:<id>` |
-| `GET /robots.txt`, `/llms.txt`, `/sitemap.xml`, `/sitemaps/pages.xml`, `/sitemaps/offers.xml`, `/sitemaps/products.xml` | discovery (below); `pages.xml` lists the front page and every list (hot, new, ending, picks, each category and shop, crowdfunding) while it has deals |
+| `GET /robots.txt`, `/llms.txt`, `/sitemap.xml`, `/sitemap-pages.xml`, `/sitemap-<n>.xml` | discovery (below): the index names `sitemap-pages.xml` (the front page and every list — hot, new, ending, picks, each category and shop, crowdfunding — while it has deals) and one `/sitemap-<n>.xml` child per 10,000 catalog URLs (offers, then products, always in that order); a child number past the last is 404 |
 | `GET /api/health`, `/api/ready`, `/release.json`, `/metrics` | operations (`/metrics` loopback only; nginx never proxies it) |
 | `/auth/*` | Network SSO (the same session layer as Community/Blog) |
 
@@ -137,7 +137,7 @@ two subscriptions are created at boot when missing (`startSubscriptions`, needs 
 - The latest observation is **fresh** while younger than `DEALS_FRESHNESS_HOURS` (48 h), **stale**
   after; no observation is **unobserved**. Pages print "as of <time>", a stale price says it may no
   longer be available, and nothing on the site calls a price "current".
-- Stale → `noindex` (gate reason `stale_price`), out of `sitemaps/offers.xml`, the Offer JSON-LD
+- Stale → `noindex` (gate reason `stale_price`), out of the catalog sitemaps (`/sitemap-<n>.xml`), the Offer JSON-LD
   loses its price/currency/availability, and the worker re-sends the Search document (freshness
   facet, `noindex`) — only when it actually changed.
 - A price needs its currency: `10` without `USD` is refused (422), never completed. `$10` is refused
