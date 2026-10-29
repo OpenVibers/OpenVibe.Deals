@@ -62,6 +62,8 @@ function createPages(ctx) {
 
     function send(req, res, status, page, { cacheable = false } = {}) {
         cacheHeaders(req, res, { cacheable, robots: page.decision.robots, status });
+        // A page with a Markdown twin names it in the Link header, exactly as the agent layer's own responses do.
+        if (page.agent) res.set('Link', require('openvibe-shared/agent-layer').linkHeaderTags(page.canonical, `${String(config.baseUrl).replace(/\/+$/, '')}/llms.txt`).header);
         res.status(status).type('html').send(renderPage({ ...page, viewer: req.viewer, config, path: req.originalUrl }));
     }
 
@@ -128,16 +130,16 @@ function createPages(ctx) {
             count: async () => await listings.countPicks(), rows: async (n, off) => await listings.picks(n, off), empty: 'No picks right now.' },
     };
 
-    async function listPage(req, res, kind) {
+    async function listPage(kind, page = 1) {
         const L = LISTS[kind];
-        const page = pageNumber(req);
         const path = L.path;
         const total = await L.count();
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
-        if (pager.outOfRange && total) return notFound(req, res);
+        if (pager.outOfRange && total) return null;
         const list = await Promise.all((await L.rows(PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
-        send(req, res, 200, {
+        return {
+            agent: true,
             title: L.heading,
             description: L.description || 'Deals submitted and voted on by the community, each with its source and the time its price was observed.',
             decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
@@ -146,7 +148,7 @@ function createPages(ctx) {
             prev: pager.prev ? pager.prev.href : null,
             next: pager.next ? pager.next.href : null,
             body: views.offerList({ heading: L.heading, intro: L.intro, views: list, pager, urls, tabs: views.tabs(kind), empty: L.empty }),
-        }, { cacheable: true });
+        };
     }
 
     // ── the front page ──────────────────────────────────────
@@ -155,7 +157,7 @@ function createPages(ctx) {
     const UNDER = { amount: 20, currency: 'USD' };
     const HOME_CARDS = 8;
 
-    async function homePage(req, res) {
+    async function homePage() {
         const now = store.now();
         const fresh = now - config.freshnessMs;
         const [total, sellers, categories, seenDay, endingWeek, cf] = await Promise.all([
@@ -194,7 +196,8 @@ function createPages(ctx) {
         });
         const faq = home.faqItems({ freshnessHours: Math.round(config.freshnessMs / 3600000) });
         const listed = [...picks, ...upvoted, ...latest];
-        send(req, res, 200, {
+        return {
+            agent: true,
             title: 'Today\'s deals, every price with its time',
             description: 'Deals from Amazon, Walmart, Best Buy and more, by shop, category and end date, with price watches and crowdfunding. Every price says when it was seen.',
             // The home page carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
@@ -213,33 +216,40 @@ function createPages(ctx) {
                 stats: { active: total, shops: sellers.length, seenDay, endingWeek, categories: categories.length, campaigns: cf.total },
                 picks, upvoted, latest, ending, under, underLimit: UNDER, categories, sellers, campaigns: cf.campaigns,
             }, urls),
-        }, { cacheable: true });
+        };
     }
 
     router.get('/', wrap(async (req, res) => {
         // The hot list's later pages moved to /hot with the front page.
         if (req.query.page && pageNumber(req) > 1) return res.redirect(301, `/hot?page=${pageNumber(req)}`);
-        await homePage(req, res);
+        send(req, res, 200, await homePage(), { cacheable: true });
     }));
-    router.get('/hot', wrap(async (req, res) => await listPage(req, res, 'hot')));
-    router.get('/ending', wrap(async (req, res) => await listPage(req, res, 'ending')));
-    router.get('/picks', wrap(async (req, res) => await listPage(req, res, 'picks')));
+    const sendList = (kind) => wrap(async (req, res) => {
+        const page = await listPage(kind, pageNumber(req));
+        if (!page) return notFound(req, res);
+        send(req, res, 200, page, { cacheable: true });
+    });
+    router.get('/hot', sendList('hot'));
+    router.get('/ending', sendList('ending'));
+    router.get('/picks', sendList('picks'));
     // What shipped on OpenVibe.Deals: the shared update log every OpenVibe site has.
-    router.get('/updates', (req, res) => send(req, res, 200, {
+    const updatesPage = () => ({
+        agent: true,
         title: 'What shipped on OpenVibe.Deals', description: 'Every change deployed to OpenVibe.Deals, newest first.',
         decision: pageDecision('/updates'), canonical: `${config.baseUrl}/updates`,
         body: frame.updatesBody({ service: 'deals', siteName: 'OpenVibe.Deals' }) + `<script src="${ovServe.url('shipped.js')}" defer></script>`,
-    }, { cacheable: true }));
-    router.get('/new', wrap(async (req, res) => await listPage(req, res, 'new')));
+    });
+    router.get('/updates', (req, res) => send(req, res, 200, updatesPage(), { cacheable: true }));
+    router.get('/new', sendList('new'));
 
     // ── offers ──────────────────────────────────────────────
 
-    async function readComments(offer, label, req) {
+    async function readComments(offer, label, ov) {
         if (!community.enabled) return { state: 'unavailable' };
         try {
-            const threadId = await community.threadFor(offer, label, req.ov);
+            const threadId = await community.threadFor(offer, label, ov);
             if (!threadId) return { state: 'unavailable' };
-            const data = await community.readThread(threadId, { ctx: req.ov });
+            const data = await community.readThread(threadId, { ctx: ov });
             return { state: 'ok', comments: data.comments || [] };
         } catch (err) {
             console.warn(`[Deals] comments for ${offer.id} unavailable: ${err.message}`);
@@ -247,38 +257,48 @@ function createPages(ctx) {
         }
     }
 
-    async function renderOffer(req, res, offer, { json = false } = {}) {
+    /** One public offer, as the route and its Markdown twin (server/agent-pages.js) both render it. */
+    async function offerPage(offer, { viewer = { kind: 'anonymous' }, ov = null, notice = null } = {}) {
         const v = await publication.offerView(offer);
         const r = v.root;
-        const dto = publication.offerDto(v);
-        if (r.status === 'disabled') {
-            if (json) return sendJson(req, res, 410, { id: r.id, slug: r.slug, status: 'disabled', reason: r.disabled_reason }, v.decision, { cacheable: false });
-            return messagePage(req, res, 410, 'This deal was removed', `Moderators removed this deal${r.disabled_reason ? `: ${r.disabled_reason}` : ''}.`, { href: '/', label: 'Hot deals' });
-        }
-        if (json) return sendJson(req, res, 200, { offer: dto }, v.decision);
-        const c = r.status === 'disabled' ? { state: 'off' } : await readComments(r, r.title, req);
+        if (r.status === 'disabled') return { status: 410, page: null, removed: r };
+        const person = viewer.kind === 'user' && Boolean(viewer.subject);
+        const c = await readComments(r, r.title, ov);
         const mergedComments = [];
         for (const m of v.members.slice(0, 3)) {
             const tid = community.enabled ? await community.knownThread(m) : null;
             if (!tid) continue;
-            try { const data = await community.readThread(tid, { ctx: req.ov }); mergedComments.push({ title: m.title, comments: { state: 'ok', comments: data.comments || [] } }); } catch { mergedComments.push({ title: m.title, comments: { state: 'unavailable' } }); }
+            try { const data = await community.readThread(tid, { ctx: ov }); mergedComments.push({ title: m.title, comments: { state: 'ok', comments: data.comments || [] } }); } catch { mergedComments.push({ title: m.title, comments: { state: 'unavailable' } }); }
         }
-        const isMod = access.isStaff(req.viewer);
+        const isMod = access.isStaff(viewer);
         const canonical = publication.abs(publication.offerPath(r));
-        send(req, res, 200, {
-            title: r.title,
-            description: `${views.priceText(v.latest)}${v.latest ? ` as of ${views.when(v.latest.observed_at)}` : ''}${r.seller ? ` at ${r.seller}` : v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${r.description ? ` ${r.description.slice(0, 120)}` : ''}`,
-            decision: v.decision,
-            canonical,
-            type: 'website',
-            jsonLd: [publication.offerJsonLd(v), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, ...(v.store ? [{ name: v.store.name || v.store.domain, url: publication.abs(publication.storePath(v.store)) }] : []), { name: r.title, url: canonical }])],
-            body: views.offerPage({
-                v, dto, viewer: req.viewer, csrf: csrf(req), myVote: signedIn(req) ? await votes.mine(req.viewer.subject, r) : 0,
-                comments: c, mergedComments, canEdit: access.canEdit(req.viewer, r), isMod,
-                log: isMod ? await offers.moderationLog(r) : null, flags: isMod ? await Promise.all((await flags.forOffer(v.ids)).map(flags.dto)) : null, urls,
-                notice: req.query.done ? { text: { vote: 'Your vote is recorded.', observe: 'Thanks — your observation is recorded with the time you saw it.', flag: 'Thanks — moderators will look at your report.', expire: 'Marked expired.', comment: 'Comment posted.', moderated: 'Done.' }[req.query.done] || 'Done.' } : null,
-            }),
-        }, { cacheable: true });
+        return {
+            status: 200,
+            page: {
+                agent: true,
+                title: r.title,
+                description: `${views.priceText(v.latest)}${v.latest ? ` as of ${views.when(v.latest.observed_at)}` : ''}${r.seller ? ` at ${r.seller}` : v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${r.description ? ` ${r.description.slice(0, 120)}` : ''}`,
+                decision: v.decision,
+                canonical,
+                type: 'website',
+                jsonLd: [publication.offerJsonLd(v), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, ...(v.store ? [{ name: v.store.name || v.store.domain, url: publication.abs(publication.storePath(v.store)) }] : []), { name: r.title, url: canonical }])],
+                body: views.offerPage({
+                    v, dto: publication.offerDto(v), viewer, csrf: person ? csrfToken(config, viewer) : '', myVote: person ? await votes.mine(viewer.subject, r) : 0,
+                    comments: c, mergedComments, canEdit: access.canEdit(viewer, r), isMod,
+                    log: isMod ? await offers.moderationLog(r) : null, flags: isMod ? await Promise.all((await flags.forOffer(v.ids)).map(flags.dto)) : null, urls,
+                    notice,
+                }),
+            },
+        };
+    }
+
+    /** One public offer by slug for the agent twin, following a merge to its root; null when unknown or removed. */
+    async function offerBySlug(slug) {
+        const offer = await reads.find(String(slug || ''));
+        if (!offer) return null;
+        const root = offer.merged_into ? await reads.root(offer) : offer;
+        const out = await offerPage(root);
+        return out.status === 200 ? out.page : null;
     }
 
     async function offerFor(req, res) {
@@ -297,7 +317,17 @@ function createPages(ctx) {
 
     router.get('/d/:slug', wrap(async (req, res) => {
         const f = await offerFor(req, res);
-        if (f) await renderOffer(req, res, f.offer, { json: f.json });
+        if (!f) return;
+        if (f.json) {
+            const v = await publication.offerView(f.offer);
+            const r = v.root;
+            if (r.status === 'disabled') return sendJson(req, res, 410, { id: r.id, slug: r.slug, status: 'disabled', reason: r.disabled_reason }, v.decision, { cacheable: false });
+            return sendJson(req, res, 200, { offer: publication.offerDto(v) }, v.decision);
+        }
+        const notice = req.query.done ? { text: { vote: 'Your vote is recorded.', observe: 'Thanks — your observation is recorded with the time you saw it.', flag: 'Thanks — moderators will look at your report.', expire: 'Marked expired.', comment: 'Comment posted.', moderated: 'Done.' }[req.query.done] || 'Done.' } : null;
+        const out = await offerPage(f.offer, { viewer: req.viewer, ov: req.ov, notice });
+        if (out.status !== 200) return messagePage(req, res, out.status, 'This deal was removed', `Moderators removed this deal${out.removed.disabled_reason ? `: ${out.removed.disabled_reason}` : ''}.`, { href: '/', label: 'Hot deals' });
+        send(req, res, 200, out.page, { cacheable: true });
     }));
 
     const back = (req) => `/d/${encodeURIComponent(req.params.slug)}`;
@@ -343,96 +373,137 @@ function createPages(ctx) {
 
     // ── products and stores ─────────────────────────────────
 
-    router.get('/p/:slug', wrap(async (req, res) => {
-        const slug = String(req.params.slug || '');
-        const json = slug.endsWith('.json');
-        const product = await catalog.productBySlug(json ? slug.slice(0, -5) : slug);
-        if (!product) return notFound(req, res);
+    async function productPage(slug) {
+        const raw = String(slug || '');
+        const json = raw.endsWith('.json');
+        const product = await catalog.productBySlug(json ? raw.slice(0, -5) : raw);
+        if (!product) return null;
         const pv = await publication.productView(product);
-        if (json) {
+        if (json) return { json: true, product, pv };
+        const canonical = publication.abs(publication.productPath(product));
+        return {
+            status: 200,
+            page: {
+                agent: true,
+                title: `${product.name} — price comparison`,
+                description: `Offers for ${product.name}, each with the time its price was observed.`,
+                decision: pv.decision, canonical,
+                jsonLd: [publication.productJsonLd(pv), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, { name: product.name, url: canonical }])],
+                body: views.productPage({ pv, urls }),
+            },
+        };
+    }
+
+    router.get('/p/:slug', wrap(async (req, res) => {
+        const out = await productPage(req.params.slug);
+        if (!out) return notFound(req, res);
+        if (out.json) {
+            const { product, pv } = out;
             return sendJson(req, res, 200, {
                 product: { id: product.id, slug: product.slug, name: product.name, brand: product.brand, category: product.category, url: publication.abs(publication.productPath(product)), aliases: pv.aliases.map((a) => ({ kind: a.kind, value: a.value })) },
                 offers: pv.offers.map((v) => { const d = publication.offerDto(v); return { id: d.id, slug: d.slug, url: d.url, title: d.title, status: d.status, store: d.store, latest_observation: d.latest_observation, freshness: d.freshness }; }),
                 indexability: { indexable: pv.decision.indexable, robots: pv.decision.robots, reasons: pv.decision.reasons },
             }, pv.decision);
         }
-        const canonical = publication.abs(publication.productPath(product));
-        send(req, res, 200, {
-            title: `${product.name} — price comparison`,
-            description: `Offers for ${product.name}, each with the time its price was observed.`,
-            decision: pv.decision, canonical,
-            jsonLd: [publication.productJsonLd(pv), seo.structuredData.breadcrumbs([{ name: 'Deals', url: publication.abs('/') }, { name: product.name, url: canonical }])],
-            body: views.productPage({ pv, urls }),
-        }, { cacheable: true });
+        send(req, res, 200, out.page, { cacheable: true });
     }));
 
-    router.get('/s/:domain', wrap(async (req, res) => {
-        const st = await catalog.storeByDomain(req.params.domain);
-        if (!st) return notFound(req, res);
+    async function storePage(domain, page = 1) {
+        const st = await catalog.storeByDomain(String(domain || ''));
+        if (!st) return null;
         const path = publication.storePath(st);
         const total = await listings.countStore(st.id);
-        const pager = ssr.paginate({ page: pageNumber(req), perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
-        if (pager.outOfRange && total) return notFound(req, res);
+        const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
+        if (pager.outOfRange && total) return null;
         const list = await Promise.all((await listings.byStore(st.id, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
-        send(req, res, 200, {
+        return {
+            agent: true,
             title: `Deals at ${st.name || st.domain}`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             body: views.storePage({ st, views: list, pager, urls }),
-        }, { cacheable: true });
+        };
+    }
+
+    router.get('/s/:domain', wrap(async (req, res) => {
+        const page = await storePage(req.params.domain, pageNumber(req));
+        if (!page) return notFound(req, res);
+        send(req, res, 200, page, { cacheable: true });
     }));
 
     // ── shops (the seller a source names, migration 0006) ──
-    router.get('/at', wrap(async (req, res) => {
+    async function sellersIndexPage() {
         const sellers = await listings.sellers();
-        send(req, res, 200, {
+        return {
+            agent: true,
             title: 'Deals by shop', decision: pageDecision('/at', { empty: sellers.length === 0 }), canonical: seo.canonicalUrl(config.baseUrl, '/at'),
             body: views.sellersPage({ sellers }),
-        }, { cacheable: true });
-    }));
-    router.get('/at/:seller', wrap(async (req, res) => {
-        const want = String(req.params.seller || '').toLowerCase();
+        };
+    }
+
+    router.get('/at', wrap(async (req, res) => send(req, res, 200, await sellersIndexPage(), { cacheable: true })));
+
+    async function sellerPage(seller, page = 1) {
+        const want = String(seller || '').toLowerCase();
         const hit = /^[a-z0-9-]{1,80}$/.test(want) ? (await listings.sellers()).find((x) => x.slug === want) : null;
-        if (!hit) return notFound(req, res);
+        if (!hit) return null;
         const path = `/at/${hit.slug}`;
         const total = await listings.countSeller(hit.seller);
-        const pager = ssr.paginate({ page: pageNumber(req), perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
-        if (pager.outOfRange && total) return notFound(req, res);
+        const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
+        if (pager.outOfRange && total) return null;
         const list = await Promise.all((await listings.bySeller(hit.seller, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
-        send(req, res, 200, {
+        return {
+            agent: true,
             title: `Deals at ${hit.seller}`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
             description: `${total} deal${total === 1 ? '' : 's'} at ${hit.seller}, each with its source, price and when it was seen.`,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             body: views.sellerPage({ seller: hit.seller, views: list, pager, urls, total }),
-        }, { cacheable: true });
+        };
+    }
+
+    router.get('/at/:seller', wrap(async (req, res) => {
+        const page = await sellerPage(req.params.seller, pageNumber(req));
+        if (!page) return notFound(req, res);
+        send(req, res, 200, page, { cacheable: true });
     }));
 
     // ── categories (as each deal's source names it, migration 0007) ──
-    router.get('/c', wrap(async (req, res) => {
+    async function categoriesIndexPage() {
         const categories = await listings.categories();
-        send(req, res, 200, {
+        return {
+            agent: true,
             title: 'Deals by category', decision: pageDecision('/c', { empty: categories.length === 0 }), canonical: seo.canonicalUrl(config.baseUrl, '/c'),
             description: 'Every deal category on OpenVibe.Deals, from TVs to cleaning supplies, with how many active deals each has.',
             body: views.categoriesPage({ categories }),
-        }, { cacheable: true });
-    }));
-    router.get('/c/:category', wrap(async (req, res) => {
-        const want = String(req.params.category || '').toLowerCase();
+        };
+    }
+
+    router.get('/c', wrap(async (req, res) => send(req, res, 200, await categoriesIndexPage(), { cacheable: true })));
+
+    async function categoryPage(category, page = 1) {
+        const want = String(category || '').toLowerCase();
         const hit = /^[a-z0-9-]{1,80}$/.test(want) ? (await listings.categories()).find((x) => x.slug === want) : null;
-        if (!hit) return notFound(req, res);
+        if (!hit) return null;
         const path = `/c/${hit.slug}`;
         const total = await listings.countCategory(hit.category);
-        const pager = ssr.paginate({ page: pageNumber(req), perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
-        if (pager.outOfRange && total) return notFound(req, res);
+        const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
+        if (pager.outOfRange && total) return null;
         const list = await Promise.all((await listings.byCategory(hit.category, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
-        send(req, res, 200, {
+        return {
+            agent: true,
             title: `${hit.category} deals`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
             description: `${total} active ${hit.category} deal${total === 1 ? '' : 's'}, each with its shop, its price and when that price was seen.`,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             body: views.categoryPage({ category: hit.category, views: list, pager, urls, total }),
-        }, { cacheable: true });
+        };
+    }
+
+    router.get('/c/:category', wrap(async (req, res) => {
+        const page = await categoryPage(req.params.category, pageNumber(req));
+        if (!page) return notFound(req, res);
+        send(req, res, 200, page, { cacheable: true });
     }));
 
     // ── search ──────────────────────────────────────────────
@@ -577,7 +648,14 @@ function createPages(ctx) {
     });
     router.get('/feed.json', async (_req, res) => res.type('application/feed+json').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(JSON.stringify(seo.jsonFeed({ ...channel(), feedUrl: publication.abs('/feed.json') }, await feedItems()))));
 
-    return { router, notFound, messagePage };
+    // The public pages the agent layer's Markdown twins (server/agent-pages.js) render with the same builders.
+    const publicViews = {
+        home: homePage, list: listPage, offer: offerBySlug, product: productPage,
+        store: storePage, sellers: sellersIndexPage, seller: sellerPage,
+        categories: categoriesIndexPage, category: categoryPage, updates: updatesPage,
+    };
+
+    return { router, notFound, messagePage, publicViews };
 }
 
 module.exports = { createPages };

@@ -197,6 +197,19 @@ async function createApp(opts = {}) {
     // ── Discovery, public pages ─────────────────────────────
     app.use(createDiscoveryRoutes(ctx));
     const pages = createPages(ctx);
+    // The agent layer (openvibe-shared/agent-layer): /.well-known/agent.json and the Markdown twins of the public
+    // pages. The pages themselves keep their own routes — a signed-in visitor's vote buttons and account bar are
+    // theirs — so only the manifest and twin requests reach this mount; the pages advertise the twin themselves.
+    const agentLayer = express();
+    require('openvibe-shared/agent-layer').mount(agentLayer, {
+        descriptor: require('./agent-descriptor'),
+        render: require('./agent-pages').createAgentPages(ctx, pages.publicViews).renderPublicPage,
+    });
+    app.use((req, res, next) => {
+        const twin = req.path.endsWith('.md') || req.query.format === 'markdown' || String(req.headers.accept || '').includes('text/markdown');
+        if (req.path !== '/.well-known/agent.json' && !twin) return next();
+        return agentLayer(req, res, next);
+    });
     const formLimit = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
     app.use(['/submit', '/watches', '/mod', '/d/:slug/:action'], (req, res, next) => (req.method === 'POST' ? formLimit(req, res, next) : next()));
     app.use(require('./http/crowdfunding').createCrowdfundingRoutes(ctx));

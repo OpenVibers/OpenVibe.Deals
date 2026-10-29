@@ -76,7 +76,12 @@ function renderPage(o) {
     const account = signedIn
         ? `${viewer.staff ? '<a href="/mod">Moderation</a> · ' : ''}<a href="/watches">Watches</a> · <a href="/auth/logout?next=${loginNext}">Sign out</a>`
         : `<a href="/auth/login?next=${loginNext}">Sign in with OpenVibe</a>`;
+    // A page with a Markdown twin (o.agent) advertises it in the head; the twin itself is server/agent-pages.js.
+    const agentHead = o.agent && o.canonical
+        ? require('openvibe-shared/agent-layer').linkHeaderTags(o.canonical, `${o.config.baseUrl.replace(/\/+$/, '')}/llms.txt`).head
+        : '';
     return layout.renderDocument({
+        head: agentHead,
         site: 'deals',
         siteName: SITE_NAME,
         lang: o.lang,
