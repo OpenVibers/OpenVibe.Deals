@@ -104,8 +104,15 @@ async function boot(opts = {}) {
 }
 
 /** JSON-LD blocks of an HTML page. */
+/** The JSON-LD of a page: every script's nodes, with a one-@graph script flattened into its nodes. */
 function jsonLd(htmlText) {
-    return [...htmlText.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+    return [...htmlText.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+        .flatMap((m) => { const doc = JSON.parse(m[1]); return Array.isArray(doc['@graph']) ? doc['@graph'] : [doc]; });
+}
+
+/** How many JSON-LD scripts a page carries (the estate ships one per page). */
+function jsonLdScripts(htmlText) {
+    return [...htmlText.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].length;
 }
 
 const robotsOf = (htmlText) => (/<meta name="robots" content="([^"]+)"/.exec(htmlText) || [])[1];
@@ -116,4 +123,4 @@ async function check(name, fn) {
 }
 function done() { console.log(failures ? `\n${failures} failed` : '\nall passed'); process.exit(failures ? 1 : 0); }
 
-module.exports = { boot, check, done, makeClock, jsonLd, robotsOf, HOUR };
+module.exports = { boot, check, done, makeClock, jsonLd, jsonLdScripts, robotsOf, HOUR };

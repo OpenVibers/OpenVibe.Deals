@@ -15,6 +15,15 @@ const path = require('path');
 const layout = require('openvibe-publishing/layout');
 const frame = require('openvibe-shared/frame');
 
+/**
+ * The page's JSON-LD in one script: every node in one @graph, so a page carries exactly one JSON-LD script.
+ * The nodes keep their own fields; only their own @context goes, because the graph carries it once.
+ */
+const oneGraph = (nodes) => {
+    const graph = nodes.filter(Boolean).map((n) => { const c = { ...n }; delete c['@context']; return c; });
+    return [{ '@context': 'https://schema.org', '@graph': graph }];
+};
+
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.Deals';
 // One site summary, shared by /llms.txt, /llms-full.txt and the home page's ai-summary.
@@ -113,4 +122,4 @@ function renderPage(o) {
     });
 }
 
-module.exports = { renderPage, asset, assetVersion, setRelease, SITE_NAME, SITE_SUMMARY, NETWORK_URL };
+module.exports = { renderPage, asset, assetVersion, setRelease, SITE_NAME, SITE_SUMMARY, NETWORK_URL, oneGraph };

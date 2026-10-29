@@ -175,7 +175,8 @@ function createPublication({ config, store, reads, catalog }) {
             seller: v.root.seller ? { '@type': 'Organization', name: v.root.seller } : v.store ? { '@type': 'Organization', name: v.store.name || v.store.domain } : undefined,
         };
         if (fresh && o) {
-            if (o.price != null && o.currency) { ld.price = o.price; ld.priceCurrency = o.currency; }
+            // The price a buyer pays, as a number (the page shows the same number and its currency).
+            if (o.price != null && o.currency) { ld.price = o.price_num != null ? o.price_num : Number(o.price); ld.priceCurrency = o.currency; }
             if (o.availability) ld.availability = `https://schema.org/${{ in_stock: 'InStock', out_of_stock: 'OutOfStock', preorder: 'PreOrder', discontinued: 'Discontinued', limited: 'LimitedAvailability', sold_out: 'SoldOut', online_only: 'OnlineOnly', in_store_only: 'InStoreOnly' }[o.availability]}`;
             if (o.condition) ld.itemCondition = `https://schema.org/${{ new: 'NewCondition', used: 'UsedCondition', refurbished: 'RefurbishedCondition', damaged: 'DamagedCondition' }[o.condition]}`;
             if (o.shipping != null && o.currency) ld.shippingDetails = { '@type': 'OfferShippingDetails', shippingRate: { '@type': 'MonetaryAmount', value: o.shipping, currency: o.currency } };
@@ -184,12 +185,14 @@ function createPublication({ config, store, reads, catalog }) {
         return ld;
     }
 
+    /**
+     * The offer's own page: one Product node, named by the page's own heading (the offer's title).
+     * The page never names a brand, so no brand is claimed; the brand belongs to the product's own page.
+     */
     function offerJsonLd(v) {
-        const name = v.product ? v.product.name : v.root.title;
         return seo.compact({
-            '@context': 'https://schema.org', '@type': 'Product', name, url: abs(offerPath(v.root)),
+            '@context': 'https://schema.org', '@type': 'Product', name: v.root.title, url: abs(offerPath(v.root)),
             description: v.root.description || undefined,
-            brand: v.product && v.product.brand ? { '@type': 'Brand', name: v.product.brand } : undefined,
             offers: [offerLd(v)],
         });
     }
