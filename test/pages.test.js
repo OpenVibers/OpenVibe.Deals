@@ -203,6 +203,13 @@ const { boot, check, done, robotsOf, jsonLd, HOUR } = require('./helpers/boot');
         const llms = await t.get('/llms.txt');
         assert.match(llms.text, /OpenVibe.Deals/);
         assert.match(llms.text, /never 0/);
+        // Every URL the file lists must answer when it is fetched as a link: a language model that
+        // follows one and gets a 404 or a timeout has learned nothing from it.
+        for (const url of [...llms.text.matchAll(/\((https?:\/\/[^)]+)\)/g)].map((m) => m[1])) {
+            if (!url.startsWith('https://openvibe.deals/')) continue;
+            const u = new URL(url);
+            assert.ok((await t.get(u.pathname + u.search)).status < 400, url + ' does not answer');
+        }
         const idx = await t.get('/sitemap.xml');
         assert.match(idx.text, /<loc>https:\/\/openvibe\.deals\/sitemap-pages\.xml<\/loc>/);
         assert.match(idx.text, /<loc>https:\/\/openvibe\.deals\/sitemap-0\.xml<\/loc>/);
