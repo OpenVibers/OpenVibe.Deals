@@ -8,8 +8,10 @@
 const assert = require('assert');
 const http = require('http');
 const { boot, check, done } = require('./helpers/boot');
-const { createNetworkSender } = require('openvibe-sdk/account-data');
+const { createNetworkSender, uncovered } = require('openvibe-sdk/account-data');
 const { signDeliveryHeaders } = require('openvibe-sdk/events');
+const { TABLES } = require('../server/domain/account-data');
+const { testDb } = require('./helpers/db');
 
 const EXP = 'exp_01JZ0000000000000000000EXP';
 const DEL = 'del_01JZ0000000000000000000DEX';
@@ -34,6 +36,19 @@ async function startNetworkStub() {
 const envelope = (id, type, payload) => ({ event: { event_id: id, event_type: type, source: 'network', version: 1, timestamp: new Date().toISOString(), actor: { type: 'service', id: 'network' }, subject: { type: 'account', id: payload.subject }, visibility: 'internal', payload }, seq: 1 });
 
 (async () => {
+    await check('every table that names a person is covered or exempted with a reason', async () => {
+        const d = await testDb();
+        try {
+            const missing = await uncovered(d.db, {
+                tables: TABLES,
+               
+                taskKeyed: ["deal_watches"],
+                exempt: {"account_data_events":"the ledger of requests itself: which export and deletion Deals applied","deal_index_revisions":"owner is the search-index document's owner (type/id), not a person; the row holds a revision and hash"},
+            });
+            assert.deepStrictEqual(missing, [], `a table with a person column is neither covered nor exempted: ${missing.join(', ')}`);
+        } finally { await d.close(); }
+    });
+
     const stub = await startNetworkStub();
     const t = await boot({ accountSend: createNetworkSender({ networkInternalUrl: stub.url, clientId: 'deals', clientSecret: 'shh' }) });
     const [alice, bob] = ['alice', 'bob'].map((n) => t.network.addUser(n));
