@@ -13,7 +13,28 @@ const trim = (s) => String(s || '').replace(/\/+$/, '');
 const int = (v, def) => (Number.isFinite(parseInt(v, 10)) ? parseInt(v, 10) : def);
 const num = (v, def) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : def);
 const list = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
+const json = (v, def) => { try { const p = v ? JSON.parse(v) : null; return p && typeof p === 'object' ? p : def; } catch { return def; } };
 const HOUR = 60 * 60 * 1000;
+
+/**
+ * The feed sources whose imported offers may be reviewed automatically, and the retailer domain
+ * each of them links to. A source that is not listed here is never auto-approved.
+ */
+const IMPORT_REVIEW_SOURCES = Object.freeze({
+    'dealnews-daily': { retailerDomains: ['dealnews.com'] },
+    'crawl-zappos-com': { retailerDomains: ['zappos.com'] },
+    'crawl-footlocker-com': { retailerDomains: ['footlocker.com'] },
+    'crawl-anker-com': { retailerDomains: ['anker.com'] },
+    'crawl-humblebundle-com': { retailerDomains: ['humblebundle.com'] },
+    'crawl-gog-com': { retailerDomains: ['gog.com'] },
+    'crawl-allbirds-com': { retailerDomains: ['allbirds.com'] },
+});
+
+/** The blocked/adult terms an imported offer's title and description may not contain. */
+const IMPORT_REVIEW_BLOCKED_TERMS = Object.freeze([
+    'porn', 'xxx video', 'xxxvideo', 'hentai', 'nsfw', 'onlyfans', 'camgirl', 'escort service',
+    'viagra', 'cialis', 'payday loan', 'free bitcoin', 'crypto giveaway', 'phishing', 'work from home scam',
+]);
 
 function load(env = process.env) {
     const nodeEnv = env.NODE_ENV || 'development';
@@ -99,6 +120,17 @@ function load(env = process.env) {
             pageSize: int(env.DEALS_IMPORT_PAGE_SIZE, 100),
             maxPages: int(env.DEALS_IMPORT_MAX_PAGES, 10),
             refreshBatch: int(env.DEALS_IMPORT_REFRESH_BATCH, 50),
+        },
+
+        // The automatic review of imported offers (server/domain/import-review.js). Only a source
+        // listed here is ever auto-approved, and only the retailer domains listed for it. A crawl
+        // source's key names its retailer (crawl-zappos-com -> zappos.com).
+        importReview: {
+            enabled: env.DEALS_IMPORT_REVIEW !== 'off',
+            sources: json(env.DEALS_IMPORT_REVIEW_SOURCES, IMPORT_REVIEW_SOURCES),
+            // A short list (there was none before): adult terms and the spam terms an import may
+            // never carry. DEALS_IMPORT_REVIEW_BLOCKED_TERMS replaces it.
+            blockedTerms: env.DEALS_IMPORT_REVIEW_BLOCKED_TERMS ? list(env.DEALS_IMPORT_REVIEW_BLOCKED_TERMS) : IMPORT_REVIEW_BLOCKED_TERMS.slice(),
         },
 
         // OpenVibe.Events: the outbox relay runs only when EVENTS_URL and the client secret are set;
