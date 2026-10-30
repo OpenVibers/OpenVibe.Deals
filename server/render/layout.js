@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const layout = require('openvibe-publishing/layout');
 const frame = require('openvibe-shared/frame');
+const { foldBlock } = require('./short');
 
 /**
  * The page's JSON-LD in one script: every node in one @graph, so a page carries exactly one JSON-LD script.
@@ -90,7 +91,9 @@ function renderPage(o) {
         ? require('openvibe-shared/agent-layer').linkHeaderTags(o.canonical, `${o.config.baseUrl.replace(/\/+$/, '')}/llms.txt`).head
         : '';
     return layout.renderDocument({
-        head: agentHead,
+        // The head names the page's own Markdown twin, and carries the rules that show the picked pane of a pick
+        // block (there is one per pane, written for the page).
+        head: [agentHead, ...(o.inlineStyles || []).map((css) => `<style>${css}</style>`)].filter(Boolean).join('\n'),
         site: 'deals',
         siteName: SITE_NAME,
         lang: o.lang,
@@ -117,7 +120,12 @@ function renderPage(o) {
         release: RELEASE,
         account,
         body: o.body,
-        shipped: o.path === '/' ? frame.shipped({ service: 'deals', title: `Recently shipped on ${SITE_NAME}` }) : '',
+        // The shipped list is a part a reader rarely needs: a fold on a phone, the section it was where there is room.
+        shipped: o.path === '/' ? foldBlock({
+            id: 'hm-shipped',
+            head: `<h2 id="h-shipped">Recently shipped on ${SITE_NAME}</h2>`,
+            html: frame.shipped({ service: 'deals', title: `Recently shipped on ${SITE_NAME}` }),
+        }) : '',
         bodyClass: o.bodyClass,
     });
 }

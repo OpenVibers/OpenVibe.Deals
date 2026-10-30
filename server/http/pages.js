@@ -197,6 +197,11 @@ function createPages(ctx) {
         });
         const faq = home.faqItems({ freshnessHours: Math.round(config.freshnessMs / 3600000) });
         const listed = [...picks, ...upvoted, ...latest];
+        const data = {
+            empty: total === 0, freshnessHours: Math.round(config.freshnessMs / 3600000), faq,
+            stats: { active: total, shops: sellers.length, seenDay, endingWeek, categories: categories.length, campaigns: cf.total },
+            picks, upvoted, latest, ending, under, underLimit: UNDER, categories, sellers, campaigns: cf.campaigns,
+        };
         return {
             agent: true,
             title: 'Today\'s deals, every price with its time',
@@ -215,11 +220,9 @@ function createPages(ctx) {
                 sharedSeo.jsonLd.organization(),
             ]),
             bodyClass: 'home',
-            body: home.homePage({
-                empty: total === 0, freshnessHours: Math.round(config.freshnessMs / 3600000), faq,
-                stats: { active: total, shops: sellers.length, seenDay, endingWeek, categories: categories.length, campaigns: cf.total },
-                picks, upvoted, latest, ending, under, underLimit: UNDER, categories, sellers, campaigns: cf.campaigns,
-            }, urls),
+            body: home.homePage(data, urls),
+            // The rule that shows the picked pane of the home's pick blocks: one per pane, written for this page.
+            inlineStyles: [home.paneRules(data)],
         };
     }
 

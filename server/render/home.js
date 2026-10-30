@@ -13,6 +13,7 @@ const { html, raw } = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
 const { ago, when, priceText } = require('./views');
 const { campaignCard } = require('../http/crowdfunding');
+const { pickBlock, pickRules, foldBlock } = require('./short');
 
 const count = (n) => Number(n).toLocaleString('en-US');
 const safeHref = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
@@ -99,13 +100,6 @@ function faqItems({ freshnessHours }) {
     ];
 }
 
-function faq(items) {
-    return section({
-        id: 'hm-faq', title: 'Questions and answers',
-        body: html`<div class="hm-faq">${items.map((x) => html`<details><summary>${x.q}</summary><p>${x.a}</p></details>`)}</div>`,
-    });
-}
-
 function faqJsonLd(items) {
     return { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: items.map((x) => ({ '@type': 'Question', name: x.q, acceptedAnswer: { '@type': 'Answer', text: x.a } })) };
 }
@@ -138,16 +132,25 @@ function homePage(d, urls) {
     let under = null;
     try { under = d.underLimit ? new Intl.NumberFormat('en-US', { style: 'currency', currency: d.underLimit.currency, maximumFractionDigits: 0 }).format(d.underLimit.amount) : null; } catch { under = null; }
 
+    // The home's two pick blocks, one at a time on a phone (the owner's short-pages rule, 2026-10-30): the chips pick
+    // one of the sections and every section stays in the page for crawlers.
+    const dealPanes = [
+        { id: 'd-picks', label: 'Picks', html: section({ id: 'hm-picks', title: 'Editors\' picks', lede: 'Deals DealNews\' editors marked as their picks, newest first.', more: { href: '/picks', label: 'All picks' }, body: cards(d.picks, urls) }) },
+        { id: 'd-hot', label: 'Hot', html: section({ id: 'hm-hot', title: 'Hot right now', lede: 'Voted up by people on OpenVibe, hottest first.', more: { href: '/hot', label: 'All hot deals' }, body: cards(d.upvoted, urls) }) },
+        { id: 'd-new', label: 'Just in', html: section({ id: 'hm-new', title: 'Just in', lede: 'The newest deals from every source.', more: { href: '/new', label: 'All new deals' }, body: cards(d.latest, urls) }) },
+        { id: 'd-ending', label: 'Ending soon', html: section({ id: 'hm-ending', title: 'Ending soon', lede: 'Deals whose stated end is in the next seven days, soonest first.', more: { href: '/ending', label: 'Everything ending soon' }, body: cards(d.ending, urls, { ends: true }) }) },
+        { id: 'd-under', label: `Under ${under || 'the limit'}`, html: under ? section({ id: 'hm-under', title: `Under ${under}`, lede: `Deals with a stated price of ${under} or less, seen in the last ${d.freshnessHours} hours.`, body: cards(d.under, urls) }) : '' },
+    ];
+    const browsePanes = [
+        { id: 'd-categories', label: 'Categories', html: section({ id: 'hm-categories', title: 'Browse by category', lede: 'Categories as each deal\'s source names them, the most deals first.', more: { href: '/c', label: 'All categories' }, body: chips(catLinks, 'deal') }) },
+        { id: 'd-shops', label: 'Shops', html: section({ id: 'hm-shops', title: 'Shop by store', lede: 'Where the deals are sold, as their sources name the shop.', more: { href: '/at', label: `All ${count(d.sellers.length)} shops` }, body: chips(shopLinks, 'deal') }) },
+        { id: 'd-crowdfunding', label: 'Crowdfunding', html: section({ id: 'hm-crowdfunding', title: 'Crowdfunding', lede: 'Open-source and community campaigns from Open Collective with what they received, plus one search across Kickstarter, Indiegogo, GoFundMe and more.', more: { href: '/crowdfunding', label: 'Search crowdfunding' }, body: d.campaigns.length ? html`<ol class="cf-grid hm-cf">${d.campaigns.map(campaignCard)}</ol>` : '' }) },
+    ];
+
     return html`${hero}
 ${d.empty ? html`<p class="empty hm-empty">No deals have been posted yet. <a href="/submit">Submit the first one</a>.</p>` : ''}
-${section({ id: 'hm-picks', title: 'Editors\' picks', lede: 'Deals DealNews\' editors marked as their picks, newest first.', more: { href: '/picks', label: 'All picks' }, body: cards(d.picks, urls) })}
-${section({ id: 'hm-hot', title: 'Hot right now', lede: 'Voted up by people on OpenVibe, hottest first.', more: { href: '/hot', label: 'All hot deals' }, body: cards(d.upvoted, urls) })}
-${section({ id: 'hm-new', title: 'Just in', lede: 'The newest deals from every source.', more: { href: '/new', label: 'All new deals' }, body: cards(d.latest, urls) })}
-${section({ id: 'hm-ending', title: 'Ending soon', lede: 'Deals whose stated end is in the next seven days, soonest first.', more: { href: '/ending', label: 'Everything ending soon' }, body: cards(d.ending, urls, { ends: true }) })}
-${under ? section({ id: 'hm-under', title: `Under ${under}`, lede: `Deals with a stated price of ${under} or less, seen in the last ${d.freshnessHours} hours.`, body: cards(d.under, urls) }) : ''}
-${section({ id: 'hm-categories', title: 'Browse by category', lede: 'Categories as each deal\'s source names them, the most deals first.', more: { href: '/c', label: 'All categories' }, body: chips(catLinks, 'deal') })}
-${section({ id: 'hm-shops', title: 'Shop by store', lede: 'Where the deals are sold, as their sources name the shop.', more: { href: '/at', label: `All ${count(d.sellers.length)} shops` }, body: chips(shopLinks, 'deal') })}
-${section({ id: 'hm-crowdfunding', title: 'Crowdfunding', lede: 'Open-source and community campaigns from Open Collective with what they received, plus one search across Kickstarter, Indiegogo, GoFundMe and more.', more: { href: '/crowdfunding', label: 'Search crowdfunding' }, body: d.campaigns.length ? html`<ol class="cf-grid hm-cf">${d.campaigns.map(campaignCard)}</ol>` : '' })}
+${raw(pickBlock({ key: 'deals', label: 'The deals', head: 'The deals', panes: dealPanes }))}
+${raw(pickBlock({ key: 'browse', label: 'Ways to browse', head: 'Ways to browse', panes: browsePanes }))}
 <details class="hm-fold"><summary>How it works<span>prices, votes, shops, watches</span></summary>${raw(showcase.features({
         lede: 'A deal is a link, a title and every price anyone saw for it, each with its source and time.',
         items: [
@@ -157,8 +160,27 @@ ${section({ id: 'hm-crowdfunding', title: 'Crowdfunding', lede: 'Open-source and
             { icon: 'ov:bell', title: 'Watches and saved searches', text: 'Watch words, a product or a price limit for new prices that match, or save a search to run again.', href: '/watches' },
         ],
     }))}</details>
-${faq(d.faq)}
-${raw(showcase.network({ service: 'deals' }))}`;
+${raw(foldBlock({
+        id: 'hm-faq',
+        head: '<h2 id="hm-faq-h">Questions and answers</h2>',
+        html: html`<section class="hm-sec" aria-labelledby="hm-faq-h"><div class="hm-head"><h2>Questions and answers</h2></div><div class="hm-faq">${d.faq.map((x) => html`<details><summary>${x.q}</summary><p>${x.a}</p></details>`)}</div></section>`,
+    }))}
+${raw(foldBlock({
+        id: 'hm-network',
+        head: '<h2 id="hm-network-h">Part of OpenVibe</h2>',
+        html: showcase.network({ service: 'deals' }),
+    }))}`;
 }
 
-module.exports = { homePage, faqItems, faqJsonLd, card, money };
+/**
+ * The rules that show the picked pane of the home's two pick blocks: one per pane, written for this page.
+ */
+function paneRules(d) {
+    const ids = (panes) => panes.filter((p) => p.html).map((p) => p.id);
+    const under = (() => { try { return d.underLimit ? new Intl.NumberFormat('en-US', { style: 'currency', currency: d.underLimit.currency, maximumFractionDigits: 0 }).format(d.underLimit.amount) : null; } catch { return null; } })();
+    const dealIds = ['d-picks', 'd-hot', 'd-new', 'd-ending', under ? 'd-under' : null].filter(Boolean);
+    const browseIds = ['d-categories', 'd-shops', 'd-crowdfunding'];
+    return `@supports selector(:has(*)){@media (max-width:640px){${pickRules('deals', dealIds)}${pickRules('browse', browseIds)}}}`;
+}
+
+module.exports = { homePage, paneRules, faqItems, faqJsonLd, card, money };
