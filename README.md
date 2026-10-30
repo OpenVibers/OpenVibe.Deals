@@ -253,6 +253,19 @@ when Sources fetched them again. A removed item (takedown, licence) removes its 
 offer with no source left is disabled. Imported text is `review_state = pending` → `noindex` until a
 moderator records a review (a `usr_` subject; a service cannot review).
 
+**The automatic review of imports** (`server/domain/import-review.js`): an offer imported from a
+configured feed source is checked when it is imported. It passes when its link is https and points at
+that source's retailer domain (or a subdomain of it), its title is not empty and at most 300
+characters, its price is a positive number with a currency, it has not expired and its title and
+description state none of the blocked/adult terms. A pass sets `review_state = auto_approved`
+(published, indexable, `reviewed_by = system:import-checks`); a fail stays `pending` with the failed
+check's name in `review_failed_check`. The configured sources and their retailer domains are in
+`server/config.js` (`DEALS_IMPORT_REVIEW_SOURCES` replaces them, `DEALS_IMPORT_REVIEW=off` turns the
+review off); a source that is not configured is never auto-approved. The offers imported before this
+existed are checked by `scripts/backfill-import-review.js` (`--dry-run` prints counts only).
+Offers people submit by hand are not touched: their review flow is unchanged, and a moderator can
+still hide any offer.
+
 The crowdfunding feed (`category=crowdfunding`, server/domain/campaigns.js) is pulled through the same chassis with its
 own cursor (`sources.crowdfunding.after` in `deals_ingest_cursor`) into `deal_campaigns` (migration
 `0005_crowdfunding.sql`), never into offers: name, summary, type, first tag, currency, the total received and yearly

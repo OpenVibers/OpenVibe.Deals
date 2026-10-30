@@ -19,6 +19,10 @@ const {
     text, longText, CONDITIONS, AVAILABILITY,
 } = require('./values');
 const { isDeal } = require('./price-trend');
+const { evaluateImport, retailerDomainsFor } = require('./import-review');
+
+/** The reviewer of an imported offer that passed the automatic checks (server/domain/import-review.js). */
+const AUTO_REVIEWER = 'system:import-checks';
 
 const FUTURE_SKEW_MS = 5 * 60 * 1000;
 
@@ -187,6 +191,34 @@ function createOffers(deps) {
         });
     }
 
+    /**
+     * The automatic review of an imported offer (server/domain/import-review.js). Only an offer from
+     * a configured feed source is reviewed; it passes when its link is https and points at that
+     * source's retailer domain, its title is present and short, its price is a positive number with
+     * a currency, it has not expired and it states no blocked term. A pass publishes it (reviewed by
+     * 'system:import-checks'); a fail stays pending with the failed check's name on the offer.
+     */
+    async function autoReview(offer, source, obsFields) {
+        const cfg = config.importReview;
+        if (!cfg || !cfg.enabled) return null;
+        const domains = retailerDomainsFor(cfg, source && source.source_key);
+        if (!domains) return null;
+        const now = store.now();
+        const result = evaluateImport({
+            url: offer.url, title: offer.title, description: offer.description,
+            price_num: obsFields ? obsFields.price_num : null, currency: obsFields ? obsFields.currency : null,
+            expires_at: offer.expires_at, status: offer.status,
+        }, { retailerDomains: domains, blockedTerms: cfg.blockedTerms, now });
+        if (result.ok) {
+            await db.prepare("UPDATE deal_offers SET review_state = 'auto_approved', reviewed_by = ?, reviewed_at = ?, review_failed_check = NULL, updated_at = ? WHERE id = ?")
+                .run(AUTO_REVIEWER, now, now, offer.id);
+            await logAction('auto_review', { offerId: offer.id, actor: AUTO_REVIEWER, reason: 'the import checks passed', before: { review_state: 'pending' }, after: { review_state: 'auto_approved' } });
+        } else {
+            await db.prepare("UPDATE deal_offers SET review_failed_check = ?, updated_at = ? WHERE id = ? AND review_state = 'pending'").run(result.failed, now, offer.id);
+        }
+        return result;
+    }
+
     /** Created by the Sources importer (no person); text is third-party and waits for review. */
     async function createImported(f, source, obsFields, { observedAt, sourceRevision }) {
         const st = await catalog.ensureStore(domainOf(f.url), f.store_name || null);
@@ -198,6 +230,7 @@ function createOffers(deps) {
         const src = await ensureSource(offer.id, source);
         await hotness.snapshot(offer.id, 'create');
         await recordObservation(offer.id, src.id, obsFields, { origin: 'import', observedAt, sourceRevision });
+        await autoReview(offer, source, obsFields);
         await indexing.emitOffer('deals.offer.created', offer, { actor: 'svc:deals', extra: { imported_from: { service: 'sources', type: 'item', id: source.ref_id } } });
         await indexing.reindex(await reads.get(offer.id));
         return await reads.get(offer.id);
