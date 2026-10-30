@@ -189,3 +189,13 @@ code { overflow-wrap: anywhere; }
   .hm-stats > li { flex: 0 0 auto; width: 132px; scroll-snap-align: start; }
   .hm-chips > li:nth-child(n+11) { display: none; }
 }
+
+/* Touch targets on phones (fleet audit, 2026-10-29): touch pointers only. */
+@media (pointer: coarse) {
+  .hm-chips a { min-height: 44px; }
+  .hm-search button { min-height: 44px; }
+  .hm-more { position: relative; }
+  .hm-more::after { content: ''; position: absolute; left: 0; right: 0; top: -9px; bottom: -9px; }
+  .hm-card h3 a { display: inline-block; min-height: 44px; }
+  .cf-campaign a { display: inline-block; min-height: 44px; }
+}
