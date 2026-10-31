@@ -20,45 +20,29 @@ const { boot, check, done } = require('./helpers/boot');
         await t.ctx.store.db.prepare("UPDATE deal_offers SET category = 'Kitchen', seller = 'Coffee Shop', staff_pick = true WHERE id = (SELECT id FROM deal_offers ORDER BY seq DESC LIMIT 1)").run();
         await t.ctx.store.db.prepare("UPDATE deal_offers SET category = 'Kitchen', seller = 'Coffee Shop' WHERE id = (SELECT id FROM deal_offers ORDER BY seq ASC LIMIT 1)").run();
 
-        await check('the home is two pick blocks: a chip per section, the first picked, every section in the page', async () => {
+        await check('the home shows every section: no chip row, every section in the page', async () => {
             const r = await t.get('/');
             assert.strictEqual(r.status, 200, r.text);
             const page = r.text;
-            for (const key of ['deals', 'browse']) {
-                const start = page.indexOf(`<div class="pick" id="pick-${key}">`);
-                const next = page.indexOf('<div class="pick" id="pick-', start + 10);
-                const block = page.slice(start, next > 0 ? next : start + 20000);
-                assert.ok(block.startsWith(`<div class="pick" id="pick-${key}">`), `the ${key} block is on the home`);
-                const chips = [...block.matchAll(/<input type="radio" name="pick-[a-z]+" id="pk-[a-z]+-([a-z-]+)" value="\1"( checked)?><label for="pk-[a-z]+-\1">([^<]+)<\/label>/g)];
-                assert.ok(chips.length >= 1, `a chip per section (${chips.length})`);
-                assert.deepStrictEqual(chips.filter((m) => m[2]).map((m) => m[1]), [chips[0][1]], 'the first section is picked');
-                // Every section stays in the page, with the id its chip picks.
-                const panes = [...block.matchAll(/<div class="pick-pane" id="([a-z-]+)">/g)].map((m) => m[1]);
-                assert.deepStrictEqual(panes, chips.map((m) => m[1]), 'every section is in the page, one per chip');
-            }
-            // Nothing was removed: every section of the home is still in the page.
+            assert.ok(!page.includes('pick-deals') && !page.includes('pick-browse'), 'the pick blocks are gone');
             for (const title of ['Editors', 'Just in', 'Browse by category', 'Shop by store', 'Questions and answers']) {
                 assert.ok(page.includes(title), `${title} is on the page`);
             }
         });
 
-        await check('the CSS guard: the chips are hidden and the sections all show until 640 px and where :has() is understood', async () => {
-            const r = await t.get('/');
-            const page = r.text;
-            assert.match(page, /<style>@supports selector\(:has\(\*\)\)\{@media \(max-width:640px\)\{\.pick:has\(#pk-deals-d-picks:checked\) #d-picks\{display:block\}/, 'the rule that shows the picked section');
+        await check('nothing hides a chip or a section on a phone', async () => {
             const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'deals.css'), 'utf8');
-            assert.match(css, /\.pick-row \{ display: none; \}/, 'the chips are hidden by default');
-            assert.match(css, /@supports selector\(:has\(\*\)\) \{ @media \(max-width: 640px\) \{/, 'the phone rules are under :has() and 640 px');
-            assert.match(css, /\.pick-row label \{[^}]*min-height: 44px/, 'a chip is a 44 px target');
-            assert.match(css, /\.pick \.pick-pane \{ display: none; \}/, 'the sections are hidden on a phone');
+            assert.ok(!/\.hm-chips > li:nth-child\(n\+11\) \{ display: none/.test(css), 'no chip is hidden');
+            const page = (await t.get('/')).text;
+            assert.ok(!page.includes('@supports selector(:has(*)){@media (max-width:640px){.pick:has'), 'no pick rule is written for the home');
         });
 
-        await check('the parts a reader rarely needs are folds, open in the page and closed on a phone', async () => {
+        await check('the parts a reader rarely needs are folds that start open on every screen', async () => {
             const r = await t.get('/');
             const page = r.text;
             for (const id of ['hm-faq', 'hm-network', 'hm-shipped']) {
                 assert.ok(page.includes(`<details class="hm-fold hm-fold-block" id="${id}" open>`), `${id} is a fold, open in the page`);
-                assert.ok(page.includes(`document.getElementById("${id}")`), `${id} has the script that closes it on a phone`);
+                assert.ok(!page.includes(`document.getElementById("${id}")`), `${id} is never closed by script`);
             }
             // The content of the folds stays in the page.
             assert.match(page, /Where do the deals come from\?/);

@@ -13,7 +13,7 @@ const { html, raw } = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
 const { ago, when, priceText } = require('./views');
 const { campaignCard } = require('../http/crowdfunding');
-const { pickBlock, pickRules, foldBlock } = require('./short');
+const { pickBlock, foldBlock } = require('./short');
 
 const count = (n) => Number(n).toLocaleString('en-US');
 const safeHref = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
@@ -151,7 +151,7 @@ function homePage(d, urls) {
 ${d.empty ? html`<p class="empty hm-empty">No deals have been posted yet. <a href="/submit">Submit the first one</a>.</p>` : ''}
 ${raw(pickBlock({ key: 'deals', label: 'The deals', head: 'The deals', panes: dealPanes }))}
 ${raw(pickBlock({ key: 'browse', label: 'Ways to browse', head: 'Ways to browse', panes: browsePanes }))}
-<details class="hm-fold"><summary>How it works<span>prices, votes, shops, watches</span></summary>${raw(showcase.features({
+<details class="hm-fold" open><summary>How it works<span>prices, votes, shops, watches</span></summary>${raw(showcase.features({
         lede: 'A deal is a link, a title and every price anyone saw for it, each with its source and time.',
         items: [
             { icon: 'ov:history', title: 'Prices with their time', text: 'Each deal keeps every price it was seen at, newest first, each with its source. Nothing is called current without a fresh one.', href: '/new' },
@@ -180,7 +180,7 @@ function paneRules(d) {
     const under = (() => { try { return d.underLimit ? new Intl.NumberFormat('en-US', { style: 'currency', currency: d.underLimit.currency, maximumFractionDigits: 0 }).format(d.underLimit.amount) : null; } catch { return null; } })();
     const dealIds = ['d-picks', 'd-hot', 'd-new', 'd-ending', under ? 'd-under' : null].filter(Boolean);
     const browseIds = ['d-categories', 'd-shops', 'd-crowdfunding'];
-    return `@supports selector(:has(*)){@media (max-width:640px){${pickRules('deals', dealIds)}${pickRules('browse', browseIds)}}}`;
+    return '';
 }
 
 module.exports = { homePage, paneRules, faqItems, faqJsonLd, card, money };
