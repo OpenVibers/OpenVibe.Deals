@@ -28,7 +28,10 @@ async function start() {
     const { app, ctx } = await createApp();
     const { config } = ctx;
 
-    const server = app.listen(config.port, config.host, () => {
+    // Socket activation (2026-10-31): systemd's .socket unit holds the listener across restarts, so a deploy
+    // queues requests in the kernel instead of answering 502. Without the socket unit, the usual listen.
+    const socketActivated = process.env.LISTEN_FDS === '1' && Number(process.env.LISTEN_PID) === process.pid;
+    const server = app.listen(...(socketActivated ? [{ fd: 3 }] : [config.port, config.host]), () => {
         console.log(`[Deals] ${config.nodeEnv} on http://${config.host}:${config.port} → ${config.baseUrl} (db ${ctx.store.db.store})`);
         console.log(`[Deals] events relay ${ctx.outbox.enabled ? `on → ${config.events.url}` : 'off (events wait in event_outbox)'}; worker ${config.worker.enabled ? 'on' : 'off'}; Sources import ${ctx.sources.enabled ? 'on' : 'off'}`);
     });
