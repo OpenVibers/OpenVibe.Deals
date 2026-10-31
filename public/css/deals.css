@@ -187,7 +187,6 @@ code { overflow-wrap: anywhere; }
   .hm-cards::-webkit-scrollbar, .hm-cf::-webkit-scrollbar, .hm-stats::-webkit-scrollbar { display: none; }
   .hm-cards > li, .hm-cf > li { flex: 0 0 82%; scroll-snap-align: start; }
   .hm-stats > li { flex: 0 0 auto; width: 132px; scroll-snap-align: start; }
-  .hm-chips > li:nth-child(n+11) { display: none; }
 }
 
 /* Touch targets on phones (fleet audit, 2026-10-29): touch pointers only. */
