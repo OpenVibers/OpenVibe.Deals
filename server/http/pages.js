@@ -47,7 +47,7 @@ function createPages(ctx) {
     // Per-actor limits on the forms (http/actor-limits.js), before the form is read: each shares its budget
     // with the API route that does the same thing. Reading pages is left to the per-address limits.
     const B = (name) => actorLimits.budget(name);
-    const urls = { offerPath: publication.offerPath, productPath: publication.productPath, storePath: publication.storePath, sellerPath: publication.sellerPath, categoryPath: publication.categoryPath };
+    const urls = { offerPath: publication.offerPath, productPath: publication.productPath, storePath: publication.storePath, sellerPath: publication.sellerPath, categoryPath: publication.categoryPath, abs: publication.abs };
     const form = express.urlencoded({ extended: false, limit: '32kb' });
     const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
