@@ -30,6 +30,10 @@ function createListings({ store }) {
         countActive: db.prepare("SELECT COUNT(*) AS n FROM deal_offers WHERE status = 'active' AND merged_into IS NULL"),
         byStore: db.prepare(`SELECT * FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
         countStore: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status <> 'disabled'`),
+        // A shop's own line (market outcome 6): how many deals are active, and how often its prices were seen today.
+        storeStats: db.prepare(`SELECT (SELECT COUNT(*) FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status = 'active') AS active,
+                                       (SELECT COUNT(*) FROM deal_price_observations p JOIN deal_offers o ON o.id = p.offer_id
+                                         WHERE o.store_id = ? AND p.observed_at >= ?) AS seen24`),
         // Sellers: the shop a source names (migration 0006), as stated; a seller page lists by that exact name.
         sellers: db.prepare(`SELECT seller, COUNT(*) AS n, MAX(created_at) AS latest FROM deal_offers WHERE seller IS NOT NULL AND merged_into IS NULL AND status <> 'disabled' GROUP BY seller ORDER BY n DESC, seller LIMIT 2000`),
         bySeller: db.prepare(`SELECT * FROM deal_offers WHERE seller = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
@@ -78,6 +82,10 @@ function createListings({ store }) {
         countActive: async () => (await q.countActive.get()).n,
         byStore: async (storeId, limit, offset) => await q.byStore.all(storeId, limit, offset),
         countStore: async (storeId) => (await q.countStore.get(storeId)).n,
+        storeStats: async (storeId, now = Date.now()) => {
+            const r = await q.storeStats.get(storeId, storeId, now - 24 * 3_600_000);
+            return { active: Number(r.active) || 0, seen24: Number(r.seen24) || 0 };
+        },
         sellers: async () => (await q.sellers.all()).map((r) => ({ seller: r.seller, slug: sellerSlug(r.seller), count: Number(r.n), latest: r.latest })),
         bySeller: async (seller, limit, offset) => await q.bySeller.all(seller, limit, offset),
         countSeller: async (seller) => (await q.countSeller.get(seller)).n,
