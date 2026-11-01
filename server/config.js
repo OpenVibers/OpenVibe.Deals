@@ -54,6 +54,10 @@ function load(env = process.env) {
         // at most once in this window and shared (one build serves concurrent readers either way). Each crawler fetch
         // of /sitemap.xml rebuilt both: 5,000-24,000 slow queries a time on 2026-10-23. 0 = no reuse.
         sitemapTtlMs: int(env.DEALS_SITEMAP_TTL_MS, isProduction ? 10 * 60 * 1000 : 0),
+        // The front page as one shared build. Every home request otherwise re-reads every section (the hot list's
+        // 41,000 latest-snapshot lookups and ~40 cards' store/observation/source reads among them). Reused for this
+        // window, then one background rebuild runs while readers keep the last copy for up to three minutes.
+        homeTtlMs: int(env.DEALS_HOME_TTL_MS, isProduction ? 60 * 1000 : 0),
         trustProxy: env.TRUST_PROXY != null ? Number(env.TRUST_PROXY) : 2,
         // Per-actor limits (server/http/actor-limits.js, roadmap WS-R task 4): the API reads one caller may
         // make per minute and per hour. Writes set tighter numbers there.

@@ -37,6 +37,7 @@ const views = require('../render/views');
 const home = require('../render/home');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const { ApiError, iso } = require('../domain/values');
+const { ttlCache } = require('./ttl-cache');
 
 const PER_PAGE = 25;
 
@@ -226,10 +227,20 @@ function createPages(ctx) {
         };
     }
 
+    // The front page's build is the most expensive read on the site: the hot list looks up the latest hotness
+    // snapshot for every active offer (41,000 index probes over production's 5.7M snapshots, 0.4-1.0 s) and the
+    // cards add ~40 store/observation/source reads. Build it once per config.homeTtlMs and share it; past the
+    // window one background rebuild runs and readers keep the last copy for at most three minutes.
+    const homeData = ttlCache(homePage, {
+        ttlMs: config.homeTtlMs,
+        maxStaleMs: 3 * 60 * 1000,
+        now: store.now,
+    });
+
     router.get('/', wrap(async (req, res) => {
         // The hot list's later pages moved to /hot with the front page.
         if (req.query.page && pageNumber(req) > 1) return res.redirect(301, `/hot?page=${pageNumber(req)}`);
-        send(req, res, 200, await homePage(), { cacheable: true });
+        send(req, res, 200, await homeData(), { cacheable: true });
     }));
     const sendList = (kind) => wrap(async (req, res) => {
         const page = await listPage(kind, pageNumber(req));
@@ -662,7 +673,7 @@ function createPages(ctx) {
 
     // The public pages the agent layer's Markdown twins (server/agent-pages.js) render with the same builders.
     const publicViews = {
-        home: homePage, list: listPage, offer: offerBySlug, product: productPage,
+        home: homeData, list: listPage, offer: offerBySlug, product: productPage,
         store: storePage, sellers: sellersIndexPage, seller: sellerPage,
         categories: categoriesIndexPage, category: categoryPage, updates: updatesPage,
     };
