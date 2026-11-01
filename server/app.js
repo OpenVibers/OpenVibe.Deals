@@ -197,6 +197,10 @@ async function createApp(opts = {}) {
     // ── Discovery, public pages ─────────────────────────────
     app.use(createDiscoveryRoutes(ctx));
     const pages = createPages(ctx);
+    // The worker keeps the shared page builds (the front page and /hot's first page) warm before
+    // their windows close, so no visitor fills them (server/worker.js); it stays off in tests and
+    // restore drills with DEALS_WORKER=off.
+    ctx.worker.warm(pages.warm);
     // The agent layer (openvibe-shared/agent-layer): /.well-known/agent.json and the Markdown twins of the public
     // pages. The pages themselves keep their own routes — a signed-in visitor's vote buttons and account bar are
     // theirs — so only the manifest and twin requests reach this mount; the pages advertise the twin themselves.

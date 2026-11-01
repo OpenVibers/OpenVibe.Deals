@@ -231,8 +231,20 @@ function createPages(ctx) {
     // snapshot for every active offer (41,000 index probes over production's 5.7M snapshots, 0.4-1.0 s) and the
     // cards add ~40 store/observation/source reads. Build it once per config.homeTtlMs and share it; past the
     // window one background rebuild runs and readers keep the last copy for at most three minutes.
+    // Both builds below carry no viewer: any reader may reuse the data, send() renders the layout per request,
+    // and cacheHeaders() marks only an ANONYMOUS response public, max-age=60 (signed-in stays private).
     const homeData = ttlCache(homePage, {
         ttlMs: config.homeTtlMs,
+        maxStaleMs: 3 * 60 * 1000,
+        now: store.now,
+    });
+
+    // /hot's first page is the front page's "Hot right now" strip with its own pager: the same
+    // latest-hotness-snapshot read over every active offer (the 0.4-1.0 s query on production's
+    // 5.7M snapshots), then 25 cards. Build it once per config.hotTtlMs and share it, exactly as
+    // the front page does; deeper pages keep building for their reader.
+    const hotData = ttlCache(() => listPage('hot', 1), {
+        ttlMs: config.hotTtlMs,
         maxStaleMs: 3 * 60 * 1000,
         now: store.now,
     });
@@ -243,7 +255,8 @@ function createPages(ctx) {
         send(req, res, 200, await homeData(), { cacheable: true });
     }));
     const sendList = (kind) => wrap(async (req, res) => {
-        const page = await listPage(kind, pageNumber(req));
+        const n = pageNumber(req);
+        const page = kind === 'hot' && n === 1 ? await hotData() : await listPage(kind, n);
         if (!page) return notFound(req, res);
         send(req, res, 200, page, { cacheable: true });
     });
@@ -678,7 +691,8 @@ function createPages(ctx) {
         categories: categoriesIndexPage, category: categoryPage, updates: updatesPage,
     };
 
-    return { router, notFound, messagePage, publicViews };
+    // The shared builds the worker keeps warm (server/worker.js): each refreshes on its own TTL.
+    return { router, notFound, messagePage, publicViews, warm: [homeData, hotData] };
 }
 
 module.exports = { createPages };
