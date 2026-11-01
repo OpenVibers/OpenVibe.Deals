@@ -466,7 +466,8 @@ ${categories.length ? html`<ul class="seller-list">${categories.map((x) => html`
 }
 
 function message({ heading, text, action }) {
-    return html`<h1>${heading}</h1><p>${text}</p>${action ? html`<p><a href="${action.href}">${action.label}</a></p>` : ''}`;
+    // The next step is a button, not a bare link (a signed-out /submit or /watches offered "Sign in" as text; 2026-11-01).
+    return html`<h1>${heading}</h1><p>${text}</p>${action ? html`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}`;
 }
 
 module.exports = { offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, sellerPage, sellersPage, categoryPage, categoriesPage, message, priceText, when, ago };
