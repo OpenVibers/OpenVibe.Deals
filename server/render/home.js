@@ -12,6 +12,7 @@
 const { html, raw } = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
 const { ago, when, priceText } = require('./views');
+const { remindLink } = require('./remind');
 const { campaignCard } = require('../http/crowdfunding');
 const { pickBlock, pickRules, foldBlock } = require('./short');
 
@@ -55,10 +56,13 @@ function card(v, urls, { ends = false } = {}) {
     const where = r.seller ? html`at <a href="${urls.sellerPath(r.seller)}">${r.seller}</a>`
         : v.store && !v.attribution ? html`at <a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a>` : '';
     const via = v.attribution ? html`via <a href="${safeHref(v.attribution.url)}" rel="nofollow noopener">${v.attribution.text}</a>` : '';
+    // "Remind me" for the moment the deal ends (plan L48 R3): a quiet link in the card's own line, only when the end
+    // is stated and still ahead.
+    const remind = remindLink(r, { now: v.now, shop: v.store ? (v.store.name || v.store.domain) : '', url: urls.abs ? urls.abs(urls.offerPath(r)) : '' });
     return html`<li class="hm-card">
 <h3><a href="${urls.offerPath(r)}">${r.title}</a></h3>
 <p class="hm-price">${price} ${seenBadge(v)}</p>
-${ends && r.expires_at ? html`<p class="hm-ends">Ends <time datetime="${new Date(r.expires_at).toISOString()}" title="${when(r.expires_at)}">${until(r.expires_at, v.now)}</time> <span class="meta">(as the source states it)</span></p>` : ''}
+${ends && r.expires_at ? html`<p class="hm-ends">Ends <time datetime="${new Date(r.expires_at).toISOString()}" title="${when(r.expires_at)}">${until(r.expires_at, v.now)}</time> <span class="meta">(as the source states it)</span>${remind ? raw(remind) : ''}</p>` : ''}
 ${where || via ? html`<p class="meta hm-where">${where}${where && via ? ' · ' : ''}${via}</p>` : ''}
 </li>`;
 }

@@ -10,6 +10,7 @@
 const { html, raw, renderMarkdown, paginationHtml, breadcrumbsHtml } = require('openvibe-publishing/ssr');
 const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/values');
 const { savingOf } = require('../domain/price-trend');
+const { remindLink } = require('./remind');
 
 const pad = (n) => String(n).padStart(2, '0');
 function when(ms) {
@@ -86,13 +87,16 @@ ${o ? html` <span class="meta as-of">as of ${timeEl(o.observed_at)}</span>` : ''
 function offerCard(v, urls) {
     const r = v.root;
     const score = v.tally.up - v.tally.down;
+    // "Remind me" for the moment the deal ends (plan L48 R3): a quiet link in the card's own line, only when the end
+    // is stated and still ahead.
+    const remind = remindLink(r, { now: v.now, shop: v.store ? (v.store.name || v.store.domain) : '', url: urls.abs ? urls.abs(urls.offerPath(r)) : '' });
     return html`<li class="deal-item">
 <div class="score${score > 0 ? ' up' : score < 0 ? ' down' : ''}" title="${v.tally.up} up, ${v.tally.down} down"><span aria-hidden="true">▲</span>${score > 0 ? `+${score}` : score}</div>
 <div class="deal-body">
 <h2 class="deal-title"><a href="${urls.offerPath(r)}">${r.title}</a> ${statusBadge(r)}</h2>
 ${latestLine(v)}
 ${attributionLine(v.attribution)}
-<p class="meta">${r.seller ? html`<a class="seller" href="${urls.sellerPath ? urls.sellerPath(r.seller) : '#'}">at ${r.seller}</a> · ` : ''}${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}</p>
+<p class="meta">${r.seller ? html`<a class="seller" href="${urls.sellerPath ? urls.sellerPath(r.seller) : '#'}">at ${r.seller}</a> · ` : ''}${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}${remind ? html` · ${raw(remind)}` : ''}</p>
 </div></li>`;
 }
 
@@ -190,6 +194,9 @@ function offerPage({ v, dto, viewer, csrf, myVote, comments: c, mergedComments, 
     const signedIn = viewer.kind === 'user' && viewer.subject;
     const own = Boolean(signedIn && [r, ...v.members].some((o) => o.submitted_by === viewer.subject));
     const crumbs = [{ name: 'Deals', url: '/' }, ...(v.store ? [{ name: v.store.name || v.store.domain, url: urls.storePath(v.store) }] : []), { name: r.title }];
+    // "Remind me" for the moment the deal ends (plan L48 R3), beside the page's other actions; only when the end is
+    // stated and still ahead.
+    const remind = remindLink(r, { now: v.now, shop: v.store ? (v.store.name || v.store.domain) : '', url: urls.abs ? urls.abs(urls.offerPath(r)) : '', action: true });
     const voteForm = signedIn && r.status !== 'disabled' ? (own ? html`<p class="meta">You posted this deal.</p>` : html`<form class="inline vote" method="post" action="${urls.offerPath(r)}/vote">${csrfField(csrf)}
 <button name="value" value="up"${myVote === 1 ? raw(' aria-pressed="true"') : ''}>▲ Hot</button>
 <button name="value" value="down"${myVote === -1 ? raw(' aria-pressed="true"') : ''}>▼ Cold</button>
@@ -203,7 +210,7 @@ ${r.status === 'expired' ? html`<p class="notice">This deal expired${r.expired_a
 <section class="latest" aria-label="Latest observation">
 ${latestLine(v)}
 ${v.freshness.state === 'stale' ? html`<p class="notice stale-notice">This price was last observed ${timeEl(v.latest.observed_at)}. Deals shows it as history, not as the price now. If you see the deal, report what the page says below.</p>` : ''}
-<p><a class="button" href="${safeHref(r.url)}" rel="nofollow noopener ugc">Go to the deal at ${v.store ? v.store.name || v.store.domain : 'the store'}</a></p>
+<p><a class="button" href="${safeHref(r.url)}" rel="nofollow noopener ugc">Go to the deal at ${v.store ? v.store.name || v.store.domain : 'the store'}</a>${remind ? raw(remind) : ''}</p>
 ${r.expires_at && r.status === 'active' ? html`<p class="meta">Stated end: ${timeEl(r.expires_at)}</p>` : html`<p class="meta">End date: not stated</p>`}
 </section>
 <section class="votes" aria-label="Votes">
