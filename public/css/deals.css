@@ -127,8 +127,19 @@ code { overflow-wrap: anywhere; }
 .cf-group h3, .cf-campaign h3 { margin: 0 0 4px; font-size: 1.05rem; }
 .cf-links { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .cf-links .button { margin: 0; padding: 6px 12px; }
-.seller-list { columns: 3 220px; padding-left: 1.1rem; }
-.seller-list li { margin: 4px 0; break-inside: avoid; }
+/* Categories and stores as tiles: the whole tile is the link, the count on the right. A bulleted column of underlined
+   links read as a sitemap on a phone (phone sweep, 2026-11-01). */
+.seller-list { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); }
+.seller-list li { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; min-height: 48px; padding: 10px 14px;
+  border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-card, var(--bg-secondary, #101828));
+  transition: border-color var(--ov-dur-1, .12s) var(--ov-ease-out, ease), background var(--ov-dur-1, .12s) var(--ov-ease-out, ease); }
+.seller-list li:hover { border-color: var(--accent, #3b82f6); }
+.seller-list li:has(a:focus-visible) { outline: 2px solid var(--accent, #3b82f6); outline-offset: 2px; }
+.seller-list a { min-width: 0; overflow-wrap: anywhere; font-weight: 600; color: var(--text-primary, #e6edf7); text-decoration: none; }
+.seller-list a::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.seller-list a:focus-visible { outline: none; }
+.seller-list .meta { flex: none; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-variant-numeric: tabular-nums; white-space: nowrap;
+  background: color-mix(in srgb, var(--text-primary, #fff) 6%, transparent); color: var(--text-secondary, #96a7c2); }
 /* The front page (server/render/home.js): stats beside the hero, then sections of deal cards, chips and questions. */
 .hm-hero { padding-top: 32px; }
 .hm-search { display: flex; gap: 8px; margin-top: 20px; max-width: 560px; }
