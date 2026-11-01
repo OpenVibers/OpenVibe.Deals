@@ -26,6 +26,9 @@
 .dl-band { padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
 /* Half the hue, half the theme's text: it held on dark themes only (Daylight contrast probe, 2026-11-01). */
 .dl-band--pick { color: color-mix(in srgb, #f5b301 55%, var(--text-primary, #e8eef8)); background: color-mix(in srgb, #f5b301 16%, transparent); }
+/* On light themes that mix lands on #926e15 (4.24:1 on the band). A deeper gold reads 5.7:1; dark themes keep the
+   mix above, so their look is unchanged. */
+[data-theme-mode="light"] .dl-band--pick { color: #7c5a0f; }
 .dl-band--popular { color: var(--accent-light, #60a5fa); background: color-mix(in srgb, var(--accent, #3b82f6) 16%, transparent); }
 .dl-band--new { color: var(--text-secondary, #96a7c2); background: color-mix(in srgb, var(--text-primary, #e8eef8) 7%, transparent); }
 @media (max-width: 600px) {
