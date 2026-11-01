@@ -69,48 +69,7 @@ form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
     color: var(--success-text, var(--success, #22c55e)); background: color-mix(in srgb, var(--success, #22c55e) 14%, transparent); }
 .attribution { margin: 0; font-size: .82rem; color: var(--text-muted, #7386a3); }
 .deal-item .meta { margin: 2px 0 0; font-size: .82rem; }
-/* ── The card (market outcomes 1-5): price, was-price and saving; when it was seen and how much sits behind it; the
-   stated expiry or "Expiry unknown"; on the right the price over time and what the votes say ── */
-.dl-seen { margin: 0 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: .82rem; color: var(--text-secondary, #96a7c2); }
-.dl-seen time { color: var(--text-primary, #e8eef8); font-weight: 650; }
-.dl-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--success, #22c55e); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success, #22c55e) 18%, transparent); }
-.dl-dot--stale { background: var(--warning, #f59e0b); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning, #f59e0b) 18%, transparent); }
-.dl-when { margin: 0 0 4px; font-size: .8rem; }
-.dl-ends { color: var(--text-secondary, #96a7c2); }
-.dl-ends--soon { color: var(--warning-text, var(--warning, #f59e0b)); font-weight: 700; }
-.dl-ends--unknown, .dl-ends--past { color: var(--text-muted, #7386a3); }
-.deal-side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 8px; min-width: 112px; }
-.dl-spark { margin: 0; display: grid; justify-items: end; gap: 2px; }
-.dl-spark svg { display: block; overflow: visible; }
-.dl-spark polyline { fill: none; stroke: var(--accent, #3b82f6); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
-.dl-spark circle.lo { fill: var(--success, #22c55e); }
-.dl-spark circle.now { fill: var(--bg-card, #131c2e); stroke: var(--accent, #3b82f6); stroke-width: 1.8; }
-.dl-spark circle.now.at-low { stroke: var(--success, #22c55e); }
-.dl-spark figcaption { font-size: .7rem; color: var(--text-muted, #7386a3); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.dl-vote { margin: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
-.dl-useful { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border, #1f2d47); font-size: .78rem; font-weight: 700;
-    color: var(--text-secondary, #96a7c2); text-decoration: none; white-space: nowrap; }
-.dl-useful.has { color: var(--success-text, var(--success, #22c55e)); border-color: color-mix(in srgb, var(--success, #22c55e) 40%, var(--border, #1f2d47)); }
-.dl-useful:hover { border-color: var(--accent, #3b82f6); }
-.dl-band { padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
-.dl-band--pick { color: #f5b301; background: color-mix(in srgb, #f5b301 16%, transparent); }
-.dl-band--popular { color: var(--accent-light, #60a5fa); background: color-mix(in srgb, var(--accent, #3b82f6) 16%, transparent); }
-.dl-band--new { color: var(--text-secondary, #96a7c2); background: color-mix(in srgb, var(--text-primary, #e8eef8) 7%, transparent); }
-@media (max-width: 600px) {
-  .deal-item { grid-template-columns: minmax(0, 1fr); padding: 12px; }
-  .deal-side { flex-direction: row; align-items: center; min-width: 0; padding-top: 8px; border-top: 1px solid var(--border, #1f2d47); }
-  .dl-spark { grid-template-columns: auto auto; align-items: center; gap: 8px; justify-items: start; }
-}
-/* ── A shop's page (market outcome 6): who it is, how alive it is, and an alert ── */
-.dl-shop { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; margin: 6px 0 14px; }
-.dl-shop-mark { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 16px; font-size: 1.5rem; font-weight: 900;
-    color: var(--accent-light, #60a5fa); background: color-mix(in srgb, var(--accent, #3b82f6) 16%, var(--bg-card, #131c2e)); border: 1px solid color-mix(in srgb, var(--accent, #3b82f6) 35%, transparent); }
-.dl-shop-t h1 { margin: 0; overflow-wrap: anywhere; }
-.dl-shop-t .lede { margin: 2px 0 0; font-size: .9rem; }
-.dl-alert { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; font-weight: 700; font-size: .88rem; text-decoration: none;
-    color: var(--on-accent, #fff); background: var(--accent, #3b82f6); white-space: nowrap; }
-.dl-alert:hover { filter: brightness(1.08); }
-@media (max-width: 600px) { .dl-shop { grid-template-columns: auto minmax(0, 1fr); } .dl-alert { grid-column: 1 / -1; justify-content: center; } }
+@media (max-width: 600px) { .deal-item { padding: 12px; } }
 @media (prefers-reduced-motion: reduce) { .deal-item { transition: none; } }
 .badge.fresh { border-color: var(--success, #22c55e); color: var(--success-text, var(--success, #22c55e)); }
 .badge.stale, .badge.expired { border-color: var(--warning, #f59e0b); color: var(--warning-text, var(--warning, #f59e0b)); }

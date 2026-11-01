@@ -93,7 +93,7 @@ function renderPage(o) {
     return layout.renderDocument({
         // The head names the page's own Markdown twin, and carries the rules that show the picked pane of a pick
         // block (there is one per pane, written for the page).
-        head: [agentHead, ...(o.inlineStyles || []).map((css) => `<style>${css}</style>`)].filter(Boolean).join('\n'),
+        head: [agentHead, o.path === '/' ? '' : `<link rel="stylesheet" href="${asset('css/deal-cards.css')}">`, ...(o.inlineStyles || []).map((css) => `<style>${css}</style>`)].filter(Boolean).join('\n'),
         site: 'deals',
         siteName: SITE_NAME,
         lang: o.lang,
