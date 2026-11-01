@@ -24,7 +24,8 @@
 .dl-useful.has { color: var(--success-text, var(--success, #22c55e)); border-color: color-mix(in srgb, var(--success, #22c55e) 40%, var(--border, #1f2d47)); }
 .dl-useful:hover { border-color: var(--accent, #3b82f6); }
 .dl-band { padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
-.dl-band--pick { color: #f5b301; background: color-mix(in srgb, #f5b301 16%, transparent); }
+/* Half the hue, half the theme's text: it held on dark themes only (Daylight contrast probe, 2026-11-01). */
+.dl-band--pick { color: color-mix(in srgb, #f5b301 55%, var(--text-primary, #e8eef8)); background: color-mix(in srgb, #f5b301 16%, transparent); }
 .dl-band--popular { color: var(--accent-light, #60a5fa); background: color-mix(in srgb, var(--accent, #3b82f6) 16%, transparent); }
 .dl-band--new { color: var(--text-secondary, #96a7c2); background: color-mix(in srgb, var(--text-primary, #e8eef8) 7%, transparent); }
 @media (max-width: 600px) {
