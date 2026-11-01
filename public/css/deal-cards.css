@@ -29,7 +29,9 @@
 .dl-band--new { color: var(--text-secondary, #96a7c2); background: color-mix(in srgb, var(--text-primary, #e8eef8) 7%, transparent); }
 @media (max-width: 600px) {
   .deal-item { grid-template-columns: minmax(0, 1fr); padding: 12px; }
-  .deal-side { flex-direction: row; align-items: center; min-width: 0; padding-top: 8px; border-top: 1px solid var(--border, #1f2d47); }
+  /* The row wraps: on a 320 px phone the price and "Be the first to rate it" ran 45 px past the screen (2026-11-01). */
+  .deal-side { flex-direction: row; flex-wrap: wrap; align-items: center; min-width: 0; padding-top: 8px; border-top: 1px solid var(--border, #1f2d47); }
+  .deal-side .dl-vote { margin-left: auto; min-width: 0; }
   .dl-spark { grid-template-columns: auto auto; align-items: center; gap: 8px; justify-items: start; }
 }
 /* ── A shop's page (market outcome 6): who it is, how alive it is, and an alert ── */
