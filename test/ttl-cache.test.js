@@ -84,5 +84,16 @@ const gate = () => { const g = {}; g.promise = new Promise((resolve) => { g.open
         assert.deepStrictEqual([await read(), await read(), await read()], [1, 2, 3]);
     });
 
+    await check('refresh() rebuilds before the window closes, and the next read sees it without waiting', async () => {
+        let now = 0;
+        let builds = 0;
+        const read = ttlCache(async () => ({ build: ++builds }), { ttlMs: 100, maxStaleMs: 300, now: () => now });
+        assert.deepStrictEqual(await read(), { build: 1 });
+        now = 50;
+        assert.strictEqual(read.ttlMs, 100, 'the window is readable so the worker can warm before it closes');
+        assert.deepStrictEqual(await read.refresh(), { build: 2 });
+        assert.deepStrictEqual(await read(), { build: 2 });
+    });
+
     done();
 })().catch((err) => { console.error(err); process.exitCode = 1; });

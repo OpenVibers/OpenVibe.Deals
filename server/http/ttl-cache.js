@@ -9,6 +9,9 @@
  * first reader after a deploy and nobody else, and a failed rebuild never outlives maxStaleMs.
  *
  * ttlMs = 0 turns it off: every read builds, exactly as before.
+ *
+ * The returned read carries the same refresh() the background warmer uses (worker.js), and the
+ * window it was built with, so a timer can rebuild it before the window closes on a reader.
  */
 function ttlCache(build, { ttlMs = 0, maxStaleMs = 0, now = Date.now } = {}) {
     const ttl = Math.max(0, Number(ttlMs) || 0);
@@ -28,7 +31,7 @@ function ttlCache(build, { ttlMs = 0, maxStaleMs = 0, now = Date.now } = {}) {
         return running;
     }
 
-    return async function read() {
+    async function read() {
         if (!ttl) return await refresh();
         if (value) {
             const age = Math.max(0, now() - at);
@@ -41,7 +44,11 @@ function ttlCache(build, { ttlMs = 0, maxStaleMs = 0, now = Date.now } = {}) {
             }
         }
         return await refresh();
-    };
+    }
+
+    read.refresh = refresh;
+    read.ttlMs = ttl;
+    return read;
 }
 
 module.exports = { ttlCache };

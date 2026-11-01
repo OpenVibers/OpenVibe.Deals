@@ -58,6 +58,9 @@ function load(env = process.env) {
         // 41,000 latest-snapshot lookups and ~40 cards' store/observation/source reads among them). Reused for this
         // window, then one background rebuild runs while readers keep the last copy for up to three minutes.
         homeTtlMs: int(env.DEALS_HOME_TTL_MS, isProduction ? 60 * 1000 : 0),
+        // /hot's first page: the same latest-snapshot read over every active offer as the front page's hot strip,
+        // plus 25 cards. One shared build per window, refreshed in the background like the front page.
+        hotTtlMs: int(env.DEALS_HOT_TTL_MS, isProduction ? 60 * 1000 : 0),
         trustProxy: env.TRUST_PROXY != null ? Number(env.TRUST_PROXY) : 2,
         // Per-actor limits (server/http/actor-limits.js, roadmap WS-R task 4): the API reads one caller may
         // make per minute and per hour. Writes set tighter numbers there.
