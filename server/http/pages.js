@@ -428,7 +428,7 @@ function createPages(ctx) {
             agent: true,
             title: `Deals at ${st.name || st.domain}`, decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }), canonical,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
-            body: views.storePage({ st, views: list, pager, urls }),
+            body: views.storePage({ st, views: list, pager, urls, stats: await listings.storeStats(st.id, store.now()) }),
         };
     }
 
@@ -558,9 +558,14 @@ function createPages(ctx) {
 
     // ── watches ─────────────────────────────────────────────
 
+    /** /watches?kind=keyword&query=zappos.com, from a shop's "Alert me": only a known kind and plain words. */
+    const watchValues = (q = {}) => ({
+        kind: ['keyword', 'price_below', 'product', 'search'].includes(String(q.kind)) ? String(q.kind) : 'keyword',
+        query: typeof q.query === 'string' ? q.query.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) : '',
+    });
     async function watchesPage(req, res, status = 200, { error, notice } = {}) {
         const list = await Promise.all((await watches.list(req.viewer.subject)).map(watches.dto));
-        send(req, res, status, { title: 'Watches', decision: pageDecision('/watches', { indexable: false }), body: views.watchesPage({ csrf: csrf(req), watches: list, error, notice, urls }) });
+        send(req, res, status, { title: 'Watches', decision: pageDecision('/watches', { indexable: false }), body: views.watchesPage({ csrf: csrf(req), watches: list, error, notice, urls, values: watchValues(req.query) }) });
     }
 
     router.get('/watches', wrap(async (req, res) => {
