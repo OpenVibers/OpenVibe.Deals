@@ -83,17 +83,85 @@ ${o && o.availability ? html` · <span class="meta">${AVAILABILITY_LABEL[o.avail
 ${o ? html` <span class="meta as-of">as of ${timeEl(o.observed_at)}</span>` : ''} ${freshnessBadge(v.freshness, v.now)}</p>`;
 }
 
+/**
+ * The price over time as a line the size of a word (plan: market outcome 4): the stated prices of the offer's
+ * currency, oldest to newest, its lowest point marked. Nothing when there is only one price.
+ */
+function sparkline(t) {
+    if (!t || !Array.isArray(t.points) || t.points.length < 2) return '';
+    const pts = t.points.slice(-24);
+    const W = 104, H = 30, P = 3;
+    const lo = Math.min(...pts.map((p) => p.num)), hi = Math.max(...pts.map((p) => p.num));
+    const x = (i) => P + (i * (W - 2 * P)) / (pts.length - 1);
+    const y = (n) => (hi === lo ? H / 2 : P + ((hi - n) * (H - 2 * P)) / (hi - lo));
+    const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.num).toFixed(1)}`).join(' ');
+    const li = pts.reduce((a, p, i) => (p.num < pts[a].num ? i : a), 0);
+    const last = pts.length - 1;
+    const label = `Price over ${t.count} observations: ${t.first.price} to ${t.latest.price}${t.currency ? ` ${t.currency}` : ''}, lowest ${t.lowest.price}`;
+    return html`<figure class="dl-spark" data-points="${pts.length}"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${label}"><polyline points="${line}"/><circle class="lo" cx="${x(li).toFixed(1)}" cy="${y(pts[li].num).toFixed(1)}" r="2.4"/><circle class="now${t.atLowest ? ' at-low' : ''}" cx="${x(last).toFixed(1)}" cy="${y(pts[last].num).toFixed(1)}" r="2.6"/></svg>
+<figcaption>${t.atLowest ? 'Lowest seen' : html`low ${t.lowest.price}`}</figcaption></figure>`;
+}
+
+/** What the people who voted said, and the band it puts the deal in (market outcome 5). */
+function bandOf(v) {
+    const r = v.root;
+    if (r.staff_pick) return ['pick', 'Editors\' pick'];
+    if (v.tally && v.tally.up >= 5) return ['popular', 'Popular'];
+    if (r.created_at && v.now - Number(r.created_at) < 24 * 3_600_000) return ['new', 'New today'];
+    return null;
+}
+function voteLine(v, href) {
+    const t = v.tally || { up: 0, down: 0 };
+    const band = bandOf(v);
+    const said = t.up ? `${t.up} found this useful` : 'Be the first to rate it';
+    return html`<p class="dl-vote"><a href="${href}#vote" class="dl-useful${t.up ? ' has' : ''}" title="${t.up} up, ${t.down} down"><span aria-hidden="true">▲</span> ${said}</a>${band ? html` <span class="dl-band dl-band--${band[0]}">${band[1]}</span>` : ''}</p>`;
+}
+
+/** The expiry a source stated, with how precise it was; never an assumed one (market outcome 3). */
+function expiryLine(r, now) {
+    if (r.status === 'expired') return '';
+    if (r.expires_at == null) return html`<span class="dl-ends dl-ends--unknown">Expiry unknown</span>`;
+    const at = Number(r.expires_at);
+    const left = at - now;
+    if (left <= 0) return html`<span class="dl-ends dl-ends--past">Stated to have ended ${timeEl(at)}</span>`;
+    const soon = left < 48 * 3_600_000;
+    const d = new Date(at);
+    // A stated time at midnight UTC is a date, not a moment: say the day.
+    const day = d.getUTCHours() === 0 && d.getUTCMinutes() === 0;
+    const inWords = left < 90 * 60_000 ? `${Math.max(1, Math.round(left / 60_000))} minutes` : `${Math.round(left / 3_600_000)} hours`;
+    return html`<span class="dl-ends${soon ? ' dl-ends--soon' : ''}">${soon ? `Ends in ${inWords}:` : 'Ends'} <time datetime="${d.toISOString()}">${day ? when(at).slice(0, 10) : when(at)}</time>${day ? ' (a date, no time stated)' : ''}</span>`;
+}
+
+/** When the price was seen and how much sits behind it (market outcome 2), in the card's own words. */
+function seenLine(v) {
+    const o = v.latest;
+    if (!o) return html`<p class="dl-seen"><span class="badge stale" data-freshness="unobserved">No price seen yet</span></p>`;
+    const n = v.trend ? v.trend.count : 1;
+    const f = v.freshness || {};
+    return html`<p class="dl-seen"><span class="dl-dot dl-dot--${f.state === 'fresh' ? 'fresh' : 'stale'}" data-freshness="${f.state || 'unobserved'}" aria-hidden="true"></span>${f.state === 'stale' ? 'Last seen' : 'Price seen'} <time datetime="${new Date(Number(o.observed_at)).toISOString()}" title="${when(Number(o.observed_at))}">${ago(Number(o.observed_at), v.now)}</time>${f.state === 'stale' ? ' — it may be gone' : ''} · ${n} price${n === 1 ? '' : 's'} on record${v.root.deal_reason === 'price_drop' ? ' · lowest so far' : ''}</p>`;
+}
+
+/** The price, the was-price struck through and the saving, shipping and stock (market outcome 1). */
+function priceRow(v) {
+    const o = v.latest;
+    const stated = o && o.price != null;
+    return html`<p class="price-line"><strong class="price${stated ? '' : ' price-none'}" data-price="${stated ? o.price : ''}">${priceText(o)}</strong>${listPriceLine(o)}
+${o && shippingText(o) ? html` <span class="meta">${shippingText(o)}</span>` : ''}${o && o.availability ? html` <span class="meta">· ${AVAILABILITY_LABEL[o.availability]}</span>` : ''}</p>`;
+}
+
 function offerCard(v, urls) {
     const r = v.root;
-    const score = v.tally.up - v.tally.down;
+    const href = urls.offerPath(r);
     return html`<li class="deal-item">
-<div class="score${score > 0 ? ' up' : score < 0 ? ' down' : ''}" title="${v.tally.up} up, ${v.tally.down} down"><span aria-hidden="true">▲</span>${score > 0 ? `+${score}` : score}</div>
 <div class="deal-body">
-<h2 class="deal-title"><a href="${urls.offerPath(r)}">${r.title}</a> ${statusBadge(r)}</h2>
-${latestLine(v)}
+<h2 class="deal-title"><a href="${href}">${r.title}</a> ${statusBadge(r)}</h2>
+${priceRow(v)}
+${seenLine(v)}
+${r.status === 'expired' ? '' : html`<p class="dl-when">${expiryLine(r, v.now)}</p>`}
 ${attributionLine(v.attribution)}
 <p class="meta">${r.seller ? html`<a class="seller" href="${urls.sellerPath ? urls.sellerPath(r.seller) : '#'}">at ${r.seller}</a> · ` : ''}${v.store ? html`<a href="${urls.storePath(v.store)}">${v.store.name || v.store.domain}</a> · ` : ''}${v.product ? html`<a href="${urls.productPath(v.product)}">${v.product.name}</a> · ` : ''}posted ${timeEl(r.created_at)}${r.origin === 'import' ? ' · imported from a source' : ''}</p>
-</div></li>`;
+</div>
+<div class="deal-side">${sparkline(v.trend)}${voteLine(v, href)}</div></li>`;
 }
 
 function offerList({ heading, intro, views, pager, urls, tabs, empty, lead }) {
@@ -301,7 +369,9 @@ ${error ? html`<p class="notice error" role="alert">${error}</p>` : ''}
 </form>`;
 }
 
-function watchesPage({ csrf, watches, error, notice, urls }) {
+function watchesPage({ csrf, watches, error, notice, urls, values = {} }) {
+    // Arriving from a shop's "Alert me" (/watches?kind=keyword&query=zappos.com): the form says so, filled in.
+    const kindOpt = (k, label) => html`<option value="${k}"${values.kind === k ? raw(' selected') : ''}>${label}</option>`;
     return html`<h1>Watches and saved searches</h1>
 <p class="lede">A watch tells you once when a new observation matches it (at most one notification per observation). A saved search never notifies. Notifications are delivered by the OpenVibe network; Deals never emails.</p>
 ${error ? html`<p class="notice error" role="alert">${error}</p>` : ''}
@@ -311,9 +381,9 @@ ${w.query ? html` “${w.query}”` : ''}${w.product ? html` <a href="${w.produc
 ${w.kind === 'search' ? html` · <a href="/search?q=${encodeURIComponent(w.query)}">run</a>` : html` · ${w.notifications} notifications`}
 <form class="inline" method="post" action="/watches/${w.id}/delete">${csrfField(csrf)}<button type="submit">Delete</button></form></li>`)}</ul>` : html`<p class="empty">No watches yet.</p>`}
 <form method="post" action="/watches" class="card">${csrfField(csrf)}
-<h2>Add</h2>
-<label for="w-kind">Kind</label><select id="w-kind" name="kind"><option value="keyword">Keywords (notify)</option><option value="price_below">Price below (notify)</option><option value="product">Product (notify)</option><option value="search">Saved search (no notifications)</option></select>
-<label for="w-q">Keywords</label><input id="w-q" name="query" maxlength="200">
+<h2>${values.query ? html`Alert me about “${values.query}”` : 'Add'}</h2>
+<label for="w-kind">Kind</label><select id="w-kind" name="kind">${kindOpt('keyword', 'Keywords (notify)')}${kindOpt('price_below', 'Price below (notify)')}${kindOpt('product', 'Product (notify)')}${kindOpt('search', 'Saved search (no notifications)')}</select>
+<label for="w-q">Keywords</label><input id="w-q" name="query" maxlength="200" value="${values.query || ''}">
 <label for="w-p">Product (slug, for product and price watches)</label><input id="w-p" name="product">
 <label for="w-max">Price below</label><input id="w-max" name="max_price" inputmode="decimal">
 <label for="w-cur">Currency</label><input id="w-cur" name="currency" maxlength="3" placeholder="USD">
@@ -344,10 +414,12 @@ ${duplicates.length ? html`<ul>${duplicates.map((d) => html`<li><a href="${urls.
 <form class="inline" method="post" action="/mod/offers/${d.b.slug}/merge">${csrfField(csrf)}<input type="hidden" name="into" value="${d.a.slug}"><button type="submit">Merge the newer into the older</button></form></li>`)}</ul>` : html`<p class="empty">None found.</p>`}`;
 }
 
-function storePage({ st, views, pager, urls }) {
+function storePage({ st, views, pager, urls, stats = null }) {
+    const n = (x) => Number(x || 0).toLocaleString('en-US');
     return html`${raw(breadcrumbsHtml([{ name: 'Deals', url: '/' }, { name: st.name || st.domain }]))}
-<h1>${st.name || st.domain}</h1>
-<p class="lede">Deals at <code>${st.domain}</code>.</p>
+<header class="dl-shop"><span class="dl-shop-mark" aria-hidden="true">${String(st.name || st.domain).replace(/^www\./, '').slice(0, 1).toUpperCase()}</span>
+<div class="dl-shop-t"><h1>${st.name || st.domain}</h1><p class="lede"><a href="https://${st.domain}" rel="nofollow noopener">${st.domain}</a>${stats ? html` · ${n(stats.active)} active deal${Number(stats.active) === 1 ? '' : 's'} · prices seen ${n(stats.seen24)} time${Number(stats.seen24) === 1 ? '' : 's'} in 24 hours` : ''}</p></div>
+<a class="dl-alert" href="/watches?kind=keyword&amp;query=${encodeURIComponent(st.domain)}">Alert me about deals here</a></header>
 ${views.length ? html`<ol class="deal-list">${views.map((v) => offerCard(v, urls))}</ol>` : html`<p class="empty">No deals from this store.</p>`}
 ${raw(pager ? paginationHtml(pager) : '')}`;
 }
