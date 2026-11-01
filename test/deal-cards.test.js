@@ -6,7 +6,19 @@
  * own line: active deals, prices seen in 24 hours, and an alert prefilled for it.
  */
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { boot, check, done, HOUR } = require('./helpers/boot');
+
+const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'deal-cards.css'), 'utf8');
+const lum = (hex) => [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, c, i) => sum + [0.2126, 0.7152, 0.0722][i] * c, 0);
+const ratio = (a, b) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+};
 
 (async () => {
     const t = await boot();
@@ -58,6 +70,13 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         b = await t.submit(alice, { url: 'https://shop.example/lamp', title: 'Desk lamp', price: '20.00', currency: 'USD' });
         await db.prepare('UPDATE deal_offers SET staff_pick = true WHERE id = ?').run(b.id);
         assert.match(card((await t.get('/s/shop.example')).text, 'Desk lamp'), /dl-band--pick">Editors&#39; pick|dl-band--pick">Editors' pick/);
+    });
+
+    await check('the pick band reads on light themes; dark themes keep the mix', async () => {
+        assert.ok(css.includes('[data-theme-mode="light"] .dl-band--pick { color: #7c5a0f; }'), 'light themes use the deeper gold');
+        assert.ok(css.includes('.dl-band--pick { color: color-mix(in srgb, #f5b301 55%, var(--text-primary, #e8eef8));'), 'dark themes keep the mix');
+        const r = ratio('#7c5a0f', '#fdf3d6');
+        assert.ok(r >= 4.5, `#7c5a0f on #fdf3d6 is ${r.toFixed(2)}:1`);
     });
 
     await check('the shop: its line, its active deals, prices seen in 24 hours, an alert prefilled for it', async () => {
