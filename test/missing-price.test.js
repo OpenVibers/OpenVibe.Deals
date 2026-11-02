@@ -86,7 +86,9 @@ const { sourceItem } = require('./helpers/mocks');
         const item = feed.json().items.find((i) => i.url.endsWith(noPrice.slug));
         assert.match(item.summary, /Price not stated/);
         const doc = (await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === noPrice.id).pop().payload;
-        assert.match(doc.body, /price not stated/);
+        // The summary carries the price line when the offer has no description; either way it is "not stated", never 0.
+        assert.match(`${doc.summary || ''} ${doc.body || ''}`, /price not stated/i);
+        assert.doesNotMatch(`${doc.summary || ''} ${doc.body || ''}`, /\$0\.00|\b0 USD/);
         assert.strictEqual(doc.facets.currency, undefined);
     });
 
