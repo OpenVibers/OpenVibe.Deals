@@ -17,6 +17,11 @@
 function createWorker({ config, store, offers, hotness, indexing, listings, importer, campaigns = null, limits, log = console, timers = { setInterval, clearInterval, setTimeout } }) {
     let timer = null;
     let running = false;
+    // stop(): no new tick starts, the one running ends at its next step, and stop() waits for it, so nothing touches
+    // the database after the service closes its pool ("worker tick failed: Cannot use a pool after calling end on
+    // the pool" on each deploy, 2026-11-02: the re-index loop runs offer by offer for minutes).
+    let stopping = false;
+    let current = null;
     let lastError = null;
     let lastTickAt = null;
     // Shared page builds to keep warm (http/pages.js): the front page and /hot's first page. Their
@@ -39,21 +44,35 @@ function createWorker({ config, store, offers, hotness, indexing, listings, impo
     }
 
     async function tick() {
-        if (running) return null;
+        if (running || stopping) return null;
         running = true;
+        const run = runTick();
+        current = run;
+        try { return await run; } finally { current = null; }
+    }
+
+    async function runTick() {
         const summary = {};
         try {
             summary.expired = await offers.expireDue();
+            if (stopping) return summary;
             summary.snapshots = await hotness.tick({ windowDays: config.worker.hotWindowDays });
             let reindexed = 0;
             for (const o of await listings.indexable()) {
+                if (stopping) return summary;
                 await store.tx(async () => { if (await indexing.indexOffer(o)) reindexed++; });
             }
-            for (const p of await listings.products()) await store.tx(async () => { if (await indexing.indexProduct(p)) reindexed++; });
+            for (const p of await listings.products()) {
+                if (stopping) return summary;
+                await store.tx(async () => { if (await indexing.indexProduct(p)) reindexed++; });
+            }
             summary.reindexed = reindexed;
+            if (stopping) return summary;
             summary.import = await importer.pull();
+            if (stopping) return summary;
             summary.refresh = await importer.refresh();
-            if (campaigns) summary.campaigns = await campaigns.pull();
+            if (campaigns && !stopping) summary.campaigns = await campaigns.pull();
+            if (stopping) return summary;
             summary.pruned = await limits.prune();
             lastError = null;
         } catch (err) {
@@ -88,10 +107,13 @@ function createWorker({ config, store, offers, hotness, indexing, listings, impo
                 warmTimer.unref();
             }
         },
+        /** Stop: no new tick, the running one ends at its next step; resolves once it has. */
         stop() {
+            stopping = true;
             timers.clearInterval(timer);
             timers.clearInterval(warmTimer);
             warmTimer = null;
+            return current ? current.then(() => undefined, () => undefined) : Promise.resolve();
         },
         status: () => ({ enabled: config.worker.enabled, warming: warmTimer != null, last_error: lastError, last_tick_at: lastTickAt ? new Date(lastTickAt).toISOString() : null }),
     };
