@@ -110,7 +110,9 @@ function createIndexing({ config, store, publication, outbox, catalog, indexnow 
     async function indexProduct(product) {
         if (!product) return null;
         const pv = await publication.productView(product);
-        const lines = pv.offers.filter((v) => v.root.status === 'active').slice(0, 20).map((v) => `${v.root.title}${v.latest && v.latest.price != null ? ` — ${v.latest.price} ${v.latest.currency || ''} as of ${iso(v.latest.observed_at)}` : ''}`);
+        // One line a store: its price and day, with the offer's own title only where it differs from the product's
+        // (every line began with the same name and an ISO time: 19 of 19 product snippets repeated, 2026-11-02).
+        const lines = pv.offers.filter((v) => v.root.status === 'active').slice(0, 20).map((v) => [same(v.root.title, product.name) ? '' : v.root.title, offerLine(v)].filter(Boolean).join(': '));
         const doc = hooks.buildIndexDocument({
             owner: 'deals', type: 'product', id: product.id, revision: 0, state: 'published', visibility: 'public',
             canonicalUrl: publication.abs(publication.productPath(product)), title: product.name,
