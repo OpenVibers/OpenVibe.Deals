@@ -58,20 +58,33 @@ function createIndexing({ config, store, publication, outbox, catalog, indexnow 
         }, { traceparent });
     }
 
+    // A result's snippet reads the summary and the body together, so the body holds only what the title and summary do
+    // not: an offer's body repeated its title twice ("FuelCell 796V4 Tennis Shoes\nFuelCell 796V4 Tennis Shoes\n…",
+    // 2026-11-02) and an offer with no description had no summary at all.
+    const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = (t) => { const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`; };
+    const money = (price, currency) => (currency === 'USD' || !currency ? `$${Number(price).toFixed(2)}` : `${Number(price).toFixed(2)} ${currency}`);
+    function offerLine(v) {
+        const store = v.store && (v.store.name || v.store.domain);
+        if (!v.latest || v.latest.price == null) return store ? `At ${store}; the price is not stated.` : '';
+        return `${money(v.latest.price, v.latest.currency)}${store ? ` at ${store}` : ''}, as of ${day(v.latest.observed_at)}.`;
+    }
+
     function offerDocument(v) {
         const r = v.root;
         const provenance = v.sources.filter((s) => s.ref_service === 'sources' && !s.removed_at).slice(0, 40).map((s) => ({
             service: 'sources', type: 'item', id: s.ref_id, ...(Number.isInteger(s.ref_revision) ? { revision: s.ref_revision } : {}),
             url: s.url || undefined, retrievedAt: s.retrieved_at || undefined, label: s.source_key || undefined,
         }));
-        const priceText = v.latest && v.latest.price != null ? `${v.latest.price}${v.latest.currency ? ` ${v.latest.currency}` : ''} as of ${iso(v.latest.observed_at)}` : 'price not stated';
         return hooks.buildIndexDocument({
             owner: 'deals', type: 'offer', id: r.id, revision: 0,
             state: r.status === 'disabled' ? 'unpublished' : 'published', visibility: 'public',
             canonicalUrl: publication.abs(publication.offerPath(r)),
             title: r.title,
-            summary: r.description ? r.description.slice(0, 1000) : null,
-            body: [r.title, r.description, v.product && v.product.name, v.store && (v.store.name || v.store.domain), priceText].filter(Boolean).join('\n'),
+            summary: r.description ? r.description.slice(0, 1000) : offerLine(v) || null,
+            body: [r.description && r.description.length > 1000 ? r.description : '', r.description ? offerLine(v) : '',
+                v.product && !same(v.product.name, r.title) ? v.product.name : ''].filter(Boolean).join('\n'),
             facets: {
                 status: r.status, freshness: v.freshness.state, store: v.store ? v.store.domain : null, category: r.category,
                 currency: v.latest && v.latest.currency ? v.latest.currency : null, product: v.product ? v.product.slug : null,
@@ -102,7 +115,7 @@ function createIndexing({ config, store, publication, outbox, catalog, indexnow 
             owner: 'deals', type: 'product', id: product.id, revision: 0, state: 'published', visibility: 'public',
             canonicalUrl: publication.abs(publication.productPath(product)), title: product.name,
             summary: product.description || null,
-            body: [product.name, product.brand, ...pv.aliases.map((a) => a.value), ...lines].filter(Boolean).join('\n'),
+            body: [product.brand, ...pv.aliases.map((a) => a.value).filter((a) => !same(a, product.name)), ...lines].filter(Boolean).join('\n'),
             facets: { brand: product.brand || null, category: product.category || null, offers: pv.offers.filter((v) => v.root.status === 'active').length },
             authorship: { mode: 'human' },
             decision: pv.decision,

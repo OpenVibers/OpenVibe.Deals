@@ -68,6 +68,11 @@ const { sourceItem } = require('./helpers/mocks');
         assert.strictEqual(doc.facets.freshness, 'stale');
         assert.strictEqual(doc.indexability.decision, 'noindex');
         assert.ok(doc.revision > before[before.length - 1].payload.revision);
+        // The document says what the page says once: the title stays out of the body, and an offer without a description
+        // is summed up by its price and store (2026-11-02: bodies repeated the title twice, summaries were empty).
+        assert.ok(!String(doc.body || '').toLowerCase().includes(String(doc.title).toLowerCase()), `the body does not repeat the title: ${doc.body}`);
+        assert.ok(doc.summary, 'a summary');
+        assert.ok(!/T\d\d:\d\d/.test(`${doc.summary} ${doc.body || ''}`), 'no ISO timestamps in the text');
         await t.ctx.worker.tick();
         assert.strictEqual((await t.events('deals.index_document.upserted')).filter((e) => e.payload.id === offer.id).length, after.length);
     });
