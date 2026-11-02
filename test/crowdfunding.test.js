@@ -59,7 +59,8 @@ const campaign = (id, { slug, name, raised, backers, created, tag = null, type =
         assert.ok(r.text.includes('href="https://www.kickstarter.com/discover" rel="nofollow noopener" target="_blank"'));
         assert.ok(r.text.includes('$956,600 received to date · 12,182 contributors · $239,150 a year'), r.text.slice(r.text.indexOf('cf-campaign'), r.text.indexOf('cf-campaign') + 600));
         assert.ok(r.text.includes('href="https://opencollective.com/logseq" rel="nofollow noopener"'));
-        assert.ok(r.text.includes('Open Collective · Collective · #knowledge-base'));
+        // The kind is left out when the platform's name already says it (no "Open Collective · Collective").
+        assert.ok(r.text.includes('Open Collective · #knowledge-base') && !r.text.includes('Open Collective · Collective'));
         assert.match(robotsOf(r.text), /^index/);
         const s = await t.get('/crowdfunding?q=solar+charger&sort=new');
         assert.ok(s.text.includes('href="https://www.kickstarter.com/discover/advanced?term=solar%20charger&amp;sort=magic"'));

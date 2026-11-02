@@ -27,6 +27,8 @@ function money(cents, currency) {
 }
 const count = (n) => Number(n).toLocaleString('en-US');
 const KIND = { COLLECTIVE: 'Collective', PROJECT: 'Project', FUND: 'Fund' };
+// The kind, unless the platform's name already ends with it ("Open Collective · Collective" on the home, 2026-11-02).
+const kindAfter = (c) => { const k = c.kind && KIND[c.kind]; return k && !String(c.platform || '').toLowerCase().endsWith(k.toLowerCase()) ? k : ''; };
 
 function campaignCard(c) {
     const raised = money(c.raised_cents, c.currency);
@@ -34,7 +36,7 @@ function campaignCard(c) {
     const facts = [raised ? `${raised} received to date` : null, c.backers ? `${count(c.backers)} contributor${c.backers === 1 ? '' : 's'}` : null, budget ? `${budget} a year` : null].filter(Boolean);
     return html`<li class="card cf-campaign">
 <h3><a href="${c.url}" rel="nofollow noopener">${c.name}</a></h3>
-<p class="meta">${c.platform}${c.kind && KIND[c.kind] ? html` · ${KIND[c.kind]}` : ''}${c.tag ? html` · #${c.tag}` : ''}</p>
+<p class="meta">${c.platform}${kindAfter(c) ? html` · ${kindAfter(c)}` : ''}${c.tag ? html` · #${c.tag}` : ''}</p>
 ${c.summary ? html`<p>${c.summary.length > 220 ? `${c.summary.slice(0, 217)}…` : c.summary}</p>` : ''}
 ${facts.length ? html`<p class="meta">${facts.join(' · ')} <span class="cf-asof">(as of ${day(c.observed_at)})</span></p>` : ''}
 </li>`;
