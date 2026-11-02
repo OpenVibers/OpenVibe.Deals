@@ -67,7 +67,7 @@ function createIndexing({ config, store, publication, outbox, catalog, indexnow 
     const money = (price, currency) => (currency === 'USD' || !currency ? `$${Number(price).toFixed(2)}` : `${Number(price).toFixed(2)} ${currency}`);
     function offerLine(v) {
         const store = v.store && (v.store.name || v.store.domain);
-        if (!v.latest || v.latest.price == null) return store ? `At ${store}; the price is not stated.` : '';
+        if (!v.latest || v.latest.price == null) return `Price not stated${store ? `, at ${store}` : ''}.`;
         return `${money(v.latest.price, v.latest.currency)}${store ? ` at ${store}` : ''}, as of ${day(v.latest.observed_at)}.`;
     }
 
