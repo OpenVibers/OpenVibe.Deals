@@ -99,6 +99,22 @@ const { formula } = require('../server/domain/hotness');
         assert.deepStrictEqual(hots, [...hots].sort((a, b) => b - a));
     });
 
+    await check('the tick skips offers whose hot is 0 (no net vote: 0 at every age); a vote brings one back', async () => {
+        const db = t.ctx.store.db;
+        const Q = await t.submit(poster, { url: 'https://a.example/quiet', title: 'Offer Quiet', price: '7', currency: 'USD' });
+        assert.strictEqual(Number((await db.prepare('SELECT hot_latest FROM deal_offers WHERE id = ?').get(Q.id)).hot_latest), 0, 'created with hot 0');
+        const ticked = async () => Number((await db.prepare("SELECT COUNT(*) AS n FROM deal_hotness_snapshots WHERE offer_id = ? AND reason = 'tick'").get(Q.id)).n);
+        t.clock.advance(HOUR);
+        await t.ctx.worker.tick();
+        assert.strictEqual(await ticked(), 0, 'a tick writes no new 0 for it');
+        await t.get(`/d/${Q.slug}/vote`, { as: users[0], form: { value: 'up' } });
+        t.clock.advance(HOUR);
+        await t.ctx.worker.tick();
+        assert.strictEqual(await ticked(), 1, 'with a vote its hot moves with age, so the tick takes it');
+        const last = await t.ctx.reads.lastSnapshot(Q.id);
+        assert.ok(last.hot > 0 && last.reason === 'tick');
+    });
+
     await check('tick snapshots are kept a day, the others 7 days, and every offer\'s latest always', async () => {
         const db = t.ctx.store.db;
         const Y = await t.submit(poster, { url: 'https://a.example/keep', title: 'Offer Keep', price: '5', currency: 'USD' });
