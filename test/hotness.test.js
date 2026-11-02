@@ -115,18 +115,19 @@ const { formula } = require('../server/domain/hotness');
         assert.ok(last.hot > 0 && last.reason === 'tick');
     });
 
-    await check('tick snapshots are kept a day, the others 7 days, and every offer\'s latest always', async () => {
+    await check('tick snapshots are kept two hours, the others 7 days, and every offer\'s latest always', async () => {
         const db = t.ctx.store.db;
         const Y = await t.submit(poster, { url: 'https://a.example/keep', title: 'Offer Keep', price: '5', currency: 'USD' });
         const count = async (where, args = []) => Number((await db.prepare(`SELECT COUNT(*) AS n FROM deal_hotness_snapshots WHERE ${where}`).get(...args)).n);
         await t.ctx.worker.tick();
         const firstTick = await count("reason = 'tick'");
         assert.ok(firstTick >= 1);
-        t.clock.advance(25 * HOUR);
+        t.clock.advance(3 * HOUR);
         await t.ctx.worker.tick();
-        // The day-old ticks went, except where one is an offer's latest; this tick's are all there.
+        // The ticks older than two hours went, except where one is an offer's latest; this tick's are all there.
         const now = Number((await db.prepare("SELECT MAX(computed_at) AS t FROM deal_hotness_snapshots WHERE reason = 'tick'").get()).t);
-        assert.strictEqual(await count("reason = 'tick' AND computed_at < ?", [now - 24 * HOUR]), 0, 'no tick older than a day');
+        assert.strictEqual(await count("reason = 'tick' AND computed_at < ? AND id NOT IN (SELECT MAX(id) FROM deal_hotness_snapshots GROUP BY offer_id)", [now - 2 * HOUR]), 0, 'no superseded tick older than two hours');
+        assert.ok(await count("reason = 'tick' AND computed_at = ?", [now]) >= 1, 'this tick\'s snapshots are all there');
         assert.ok(await count("reason = 'create' AND offer_id = ?", [Y.id]) >= 1 || await count('offer_id = ?', [Y.id]) >= 1, 'the offer keeps its snapshots');
         assert.ok(await count("reason <> 'tick'") >= 1, 'vote and creation snapshots of the week stay');
         t.clock.advance(8 * 24 * HOUR);

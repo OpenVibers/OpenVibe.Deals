@@ -22,6 +22,8 @@
  */
 const FORMULA = 'hot@1';
 const HOUR = 3600 * 1000;
+// How long a tick's snapshots stay (their latest per offer always stays): two hours, about twelve ticks.
+const TICK_KEEP_HOURS = 2;
 
 function round(x, places) {
     const f = 10 ** places;
@@ -82,15 +84,21 @@ function createHotness({ store, reads }) {
                                          AND (hot_latest IS NULL OR hot_latest <> 0)`).all(t - windowDays * 24 * HOUR)).map((r) => r.id);
         await store.tx(async () => { for (const id of ids) await snapshot(id, 'tick', t); });
         // Keep the latest snapshot per offer, every snapshot a vote, merge or creation made in the last 7 days, and the
-        // worker's own tick snapshots of the last day. A tick re-snapshots every active offer (about 2,700, every ten
-        // minutes), so seven days of ticks were 2.68M rows (805 MB, 2026-10-23) behind reads that only use the latest,
-        // and this delete took 1.4 s each time. At most 50,000 rows go per tick: a backlog drains over a few hours,
-        // each delete well inside the statement timeout.
+        // worker's own tick snapshots of the last two hours. A tick re-snapshots every active offer: about 2,700 on
+        // 2026-10-23, 39,547 on 2026-11-02, when a day of ticks was 4.2M rows (1.5 GB) and the old delete
+        // (NOT IN (SELECT MAX(id) … GROUP BY offer_id)) took 1.2 s each run. A snapshot goes only when a newer one of
+        // the same offer exists, asked of the (offer_id, id) index; old ticks come in order from deal_hotness_old_ticks
+        // (migration 0011). Up to 100,000 rows a tick: more than a tick writes, so a backlog drains.
         await db.prepare(`DELETE FROM deal_hotness_snapshots WHERE id IN (
-            SELECT id FROM deal_hotness_snapshots
-             WHERE computed_at < ? AND (reason = 'tick' OR computed_at < ?)
-               AND id NOT IN (SELECT MAX(id) FROM deal_hotness_snapshots GROUP BY offer_id)
-             LIMIT 50000)`).run(t - 24 * HOUR, t - 7 * 24 * HOUR);
+            SELECT s.id FROM deal_hotness_snapshots s
+             WHERE s.reason = 'tick' AND s.computed_at < ?
+               AND EXISTS (SELECT 1 FROM deal_hotness_snapshots n WHERE n.offer_id = s.offer_id AND n.id > s.id)
+             ORDER BY s.computed_at LIMIT 100000)`).run(t - TICK_KEEP_HOURS * HOUR);
+        await db.prepare(`DELETE FROM deal_hotness_snapshots WHERE id IN (
+            SELECT s.id FROM deal_hotness_snapshots s
+             WHERE s.reason <> 'tick' AND s.computed_at < ?
+               AND EXISTS (SELECT 1 FROM deal_hotness_snapshots n WHERE n.offer_id = s.offer_id AND n.id > s.id)
+             LIMIT 20000)`).run(t - 7 * 24 * HOUR);
         return ids.length;
     }
 
