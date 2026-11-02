@@ -15,8 +15,10 @@
  *
  * The same inputs always give the same number (pure function, fixed rounding). Every snapshot
  * stores all of its inputs, so anyone can recompute it (GET /api/v1/offers/:id/hotness).
- * Snapshots are taken when votes change, on merge/unmerge, on creation, and by the worker for all
- * active offers at one shared `t` (so the hot list compares numbers computed at the same moment).
+ * Snapshots are taken when votes change, on merge/unmerge, on creation, and by the worker for the
+ * active offers whose hot is not 0, at one shared `t` (so the hot list compares numbers computed at the
+ * same moment). An offer with no net vote has score 0 and so hot 0 at every age: a tick would only
+ * write the same 0 again (5.5M rows a day once imports made 40,000 offers, 2026-11-02).
  */
 const FORMULA = 'hot@1';
 const HOUR = 3600 * 1000;
@@ -69,9 +71,15 @@ function createHotness({ store, reads }) {
         return formula({ upWeight: snap.up_weight, downWeight: snap.down_weight, firstSeenAt: snap.first_seen_at, t: snap.computed_at });
     }
 
-    /** Worker: snapshot every active canonical offer created in the window, all at the same t. */
+    /**
+     * Worker: snapshot the active canonical offers created in the window whose hot can change with time, all at the
+     * same t. Hot is score / (age + 2)^1.5, so it moves with age only when the score is not 0; an offer whose latest
+     * hot is 0 (no net vote) stays 0 until a vote, which takes its own snapshot. An offer with no snapshot yet is
+     * included, so it gets one.
+     */
     async function tick({ windowDays = 14, t = store.now() } = {}) {
-        const ids = (await db.prepare(`SELECT id FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND created_at >= ?`).all(t - windowDays * 24 * HOUR)).map((r) => r.id);
+        const ids = (await db.prepare(`SELECT id FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND created_at >= ?
+                                         AND (hot_latest IS NULL OR hot_latest <> 0)`).all(t - windowDays * 24 * HOUR)).map((r) => r.id);
         await store.tx(async () => { for (const id of ids) await snapshot(id, 'tick', t); });
         // Keep the latest snapshot per offer, every snapshot a vote, merge or creation made in the last 7 days, and the
         // worker's own tick snapshots of the last day. A tick re-snapshots every active offer (about 2,700, every ten
