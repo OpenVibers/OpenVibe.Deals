@@ -97,7 +97,8 @@ function renderPage(o) {
         site: 'deals',
         siteName: SITE_NAME,
         lang: o.lang,
-        title: o.title ? `${o.title} · ${SITE_NAME}` : SITE_NAME,
+        // A title that already names the site is not suffixed again ("What shipped on OpenVibe.Deals · OpenVibe.Deals").
+        title: o.title ? (o.title.includes(SITE_NAME) ? o.title : `${o.title} · ${SITE_NAME}`) : SITE_NAME,
         description: o.description || 'Deals submitted and voted on by the community, with source, price and freshness always shown.',
         canonical: o.canonical,
         decision: o.decision,
