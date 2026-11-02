@@ -22,10 +22,10 @@ const SEARCH_RESULTS_MAX = 100; // rows per query, whatever the caller asks
 
 function createListings({ store }) {
     const { db } = store;
-    const LATEST = 'h.id = (SELECT MAX(id) FROM deal_hotness_snapshots WHERE offer_id = o.id)';
     const q = {
-        hot: db.prepare(`SELECT o.*, h.hot AS hot FROM deal_offers o LEFT JOIN deal_hotness_snapshots h ON ${LATEST}
-                         WHERE o.status = 'active' AND o.merged_into IS NULL ORDER BY COALESCE(h.hot, 0) DESC, o.created_at DESC, o.seq DESC LIMIT ? OFFSET ?`),
+        // An offer's latest hotness is on the offer (hot_latest, kept by hotness.js; migration 0010's index matches this order).
+        hot: db.prepare(`SELECT o.*, o.hot_latest AS hot FROM deal_offers o
+                         WHERE o.status = 'active' AND o.merged_into IS NULL ORDER BY COALESCE(o.hot_latest, 0) DESC, o.created_at DESC, o.seq DESC LIMIT ? OFFSET ?`),
         newest: db.prepare(`SELECT o.* FROM deal_offers o WHERE o.status = 'active' AND o.merged_into IS NULL ORDER BY o.created_at DESC, o.seq DESC LIMIT ? OFFSET ?`),
         countActive: db.prepare("SELECT COUNT(*) AS n FROM deal_offers WHERE status = 'active' AND merged_into IS NULL"),
         byStore: db.prepare(`SELECT * FROM deal_offers WHERE store_id = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
@@ -52,8 +52,8 @@ function createListings({ store }) {
         countEnding: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE status = 'active' AND merged_into IS NULL AND expires_at > ? AND expires_at <= ?`),
         picks: db.prepare(`SELECT * FROM deal_offers WHERE staff_pick = true AND status = 'active' AND merged_into IS NULL ORDER BY created_at DESC, seq DESC LIMIT ? OFFSET ?`),
         countPicks: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE staff_pick = true AND status = 'active' AND merged_into IS NULL`),
-        upvoted: db.prepare(`SELECT o.*, h.hot AS hot FROM deal_offers o JOIN deal_hotness_snapshots h ON ${LATEST}
-                             WHERE o.status = 'active' AND o.merged_into IS NULL AND h.hot > 0 ORDER BY h.hot DESC, o.created_at DESC, o.seq DESC LIMIT ?`),
+        upvoted: db.prepare(`SELECT o.*, o.hot_latest AS hot FROM deal_offers o
+                             WHERE o.status = 'active' AND o.merged_into IS NULL AND o.hot_latest > 0 ORDER BY o.hot_latest DESC, o.created_at DESC, o.seq DESC LIMIT ?`),
         // The latest observation of each offer (the one a card shows), when it states a price in this currency at or below the limit.
         under: db.prepare(`SELECT o.* FROM deal_offers o JOIN deal_price_observations p ON p.id = (SELECT id FROM deal_price_observations WHERE offer_id = o.id ORDER BY observed_at DESC, seq DESC LIMIT 1)
                            WHERE o.status = 'active' AND o.merged_into IS NULL AND p.price_num IS NOT NULL AND p.price_num <= ? AND p.currency = ? AND p.observed_at > ?
