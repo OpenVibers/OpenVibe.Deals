@@ -41,6 +41,8 @@ function createHotness({ store, reads }) {
     const insert = db.prepare(`INSERT INTO deal_hotness_snapshots (offer_id, computed_at, formula, up_count, down_count, up_weight, down_weight, score, hot, first_seen_at, reason)
                                VALUES (@offer_id, @computed_at, @formula, @up_count, @down_count, @up_weight, @down_weight, @score, @hot, @first_seen_at, @reason)`);
     const firstSeen = db.prepare('SELECT MIN(created_at) AS t FROM deal_offers WHERE id IN (SELECT value FROM jsonb_array_elements_text(?::jsonb))');
+    // The offer carries its latest hot (migration 0010), so the lists sort on one indexed column.
+    const latest = db.prepare('UPDATE deal_offers SET hot_latest = ? WHERE id = ?');
 
     /** Inputs for a canonical offer at time t (from the database, never from a request). */
     async function inputs(rootId, t) {
@@ -58,6 +60,7 @@ function createHotness({ store, reads }) {
             up_weight: tally.upWeight, down_weight: tally.downWeight, score: r.score, hot: r.hot, first_seen_at: firstSeenAt, reason,
         };
         await insert.run(row);
+        await latest.run(row.hot, rootId);
         return row;
     }
 

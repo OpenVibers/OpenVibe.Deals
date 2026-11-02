@@ -35,6 +35,19 @@ const { formula } = require('../server/domain/hotness');
         assert.strictEqual(sx.hot, formula({ upWeight: 3, downWeight: 1, firstSeenAt: X.created_at, t: sx.computed_at }).hot);
     });
 
+    await check('the offer carries its latest hotness, and the hot list sorts on it (migration 0010)', async () => {
+        const db = t.ctx.store.db;
+        for (const title of ['Offer X', 'Offer Y']) {
+            const o = await db.prepare('SELECT id, hot_latest FROM deal_offers WHERE title = ?').get(title);
+            const last = await t.ctx.reads.lastSnapshot(o.id);
+            assert.strictEqual(Number(o.hot_latest), Number(last.hot), `${title}: hot_latest is the latest snapshot's hot`);
+        }
+        const rows = await t.ctx.listings.hot(50, 0);
+        const hots = rows.map((r) => Number(r.hot || 0));
+        assert.deepStrictEqual(hots, [...hots].sort((a, b) => b - a), 'the hot list is in hotness order');
+        assert.ok(rows.some((r) => r.title === 'Offer X' && Number(r.hot) === Number(rows.find((x) => x.title === 'Offer X').hot_latest)), 'hot is hot_latest');
+    });
+
     await check('every stored snapshot recomputes to itself (GET /api/v1/offers/:id/hotness)', async () => {
         const rows = await t.ctx.store.db.prepare('SELECT * FROM deal_hotness_snapshots').all();
         assert.ok(rows.length >= 6);
