@@ -222,8 +222,6 @@ function createPages(ctx) {
             ]),
             bodyClass: 'home',
             body: home.homePage(data, urls),
-            // The rule that shows the picked pane of the home's pick blocks: one per pane, written for this page.
-            inlineStyles: [home.paneRules(data)],
         };
     }
 

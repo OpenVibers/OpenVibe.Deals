@@ -14,7 +14,7 @@ const showcase = require('openvibe-shared/showcase');
 const { ago, when, priceText } = require('./views');
 const { remindLink } = require('./remind');
 const { campaignCard } = require('../http/crowdfunding');
-const { pickBlock, pickRules, foldBlock } = require('./short');
+const { pickBlock, foldBlock } = require('./short');
 
 const count = (n) => Number(n).toLocaleString('en-US');
 const safeHref = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
@@ -136,8 +136,6 @@ function homePage(d, urls) {
     let under = null;
     try { under = d.underLimit ? new Intl.NumberFormat('en-US', { style: 'currency', currency: d.underLimit.currency, maximumFractionDigits: 0 }).format(d.underLimit.amount) : null; } catch { under = null; }
 
-    // The home's two pick blocks, one at a time on a phone (the owner's short-pages rule, 2026-10-30): the chips pick
-    // one of the sections and every section stays in the page for crawlers.
     const dealPanes = [
         { id: 'd-picks', label: 'Picks', html: section({ id: 'hm-picks', title: 'Editors\' picks', lede: 'Deals DealNews\' editors marked as their picks, newest first.', more: { href: '/picks', label: 'All picks' }, body: cards(d.picks, urls) }) },
         { id: 'd-hot', label: 'Hot', html: section({ id: 'hm-hot', title: 'Hot right now', lede: 'Voted up by people on OpenVibe, hottest first.', more: { href: '/hot', label: 'All hot deals' }, body: cards(d.upvoted, urls) }) },
@@ -176,15 +174,4 @@ ${raw(foldBlock({
     }))}`;
 }
 
-/**
- * The rules that show the picked pane of the home's two pick blocks: one per pane, written for this page.
- */
-function paneRules(d) {
-    const ids = (panes) => panes.filter((p) => p.html).map((p) => p.id);
-    const under = (() => { try { return d.underLimit ? new Intl.NumberFormat('en-US', { style: 'currency', currency: d.underLimit.currency, maximumFractionDigits: 0 }).format(d.underLimit.amount) : null; } catch { return null; } })();
-    const dealIds = ['d-picks', 'd-hot', 'd-new', 'd-ending', under ? 'd-under' : null].filter(Boolean);
-    const browseIds = ['d-categories', 'd-shops', 'd-crowdfunding'];
-    return `@supports selector(:has(*)){@media (max-width:640px){${pickRules('deals', dealIds)}${pickRules('browse', browseIds)}}}`;
-}
-
-module.exports = { homePage, paneRules, faqItems, faqJsonLd, card, money };
+module.exports = { homePage, faqItems, faqJsonLd, card, money };
