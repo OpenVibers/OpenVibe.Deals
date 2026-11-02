@@ -39,6 +39,11 @@ function createListings({ store }) {
         bySeller: db.prepare(`SELECT * FROM deal_offers WHERE seller = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
         countSeller: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE seller = ? AND merged_into IS NULL AND status <> 'disabled'`),
         indexable: db.prepare(`SELECT * FROM deal_offers WHERE merged_into IS NULL AND status <> 'disabled' ORDER BY created_at DESC LIMIT 50000`),
+        // The canonical offers with an observation that came of age (freshnessMs) in a window: their freshness, and so
+        // their index document, may have changed with time alone. A superset is fine: an unchanged document sends nothing.
+        agedInto: db.prepare(`SELECT r.* FROM deal_offers r WHERE r.merged_into IS NULL AND r.status <> 'disabled' AND r.id IN (
+            SELECT COALESCE(o.merged_into, o.id) FROM deal_price_observations p JOIN deal_offers o ON o.id = p.offer_id
+             WHERE p.observed_at > ? AND p.observed_at <= ?) LIMIT 50000`),
         products: db.prepare(`SELECT DISTINCT p.* FROM deal_products p JOIN deal_offers o ON o.product_id = p.id WHERE o.merged_into IS NULL AND o.status <> 'disabled' LIMIT 50000`),
         duplicates: db.prepare(`SELECT a.id AS a, b.id AS b FROM deal_offers a JOIN deal_offers b
                                   ON b.store_id = a.store_id AND b.id > a.id
@@ -90,6 +95,8 @@ function createListings({ store }) {
         bySeller: async (seller, limit, offset) => await q.bySeller.all(seller, limit, offset),
         countSeller: async (seller) => (await q.countSeller.get(seller)).n,
         indexable: async () => await q.indexable.all(),
+        /** Offers whose freshness may have turned between `since` and `now` (an observation crossed freshnessMs). */
+        agedInto: async (since, now, freshnessMs) => await q.agedInto.all(since - freshnessMs, now - freshnessMs),
         products: async () => await q.products.all(),
         possibleDuplicates: async (limit = 50) => await q.duplicates.all(limit),
         pendingReview: async (limit = 50) => await q.pendingReview.all(limit),
