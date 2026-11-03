@@ -116,6 +116,25 @@ async function createApp(opts = {}) {
     const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, campaigns, auth, viewers, worker, indexnow, accountData, accountSend };
 
     const app = express();
+    // GET /openapi.json (SEO-3): this service's public API as OpenAPI 3.1, generated from the contracts
+    // (openvibe-contracts); the operations they mark internal-only are left out.
+    app.get('/openapi.json', (_req, res) => {
+        const doc = require('openvibe-contracts').openapi.document('deals');
+        if (!doc) return res.status(404).type('text/plain').send('No API document.');
+        const METHODS = new Set(['get', 'put', 'post', 'delete', 'patch', 'head', 'options']);
+        const paths = {};
+        for (const [p, item] of Object.entries(doc.paths || {})) {
+            const kept = {};
+            for (const [k, op] of Object.entries(item || {})) {
+                if (!METHODS.has(k)) { kept[k] = op; continue; }
+                const vis = [].concat((op && op['x-openvibe-visibility']) || []);
+                if (vis.length && vis.every((v) => v === 'internal')) continue;
+                kept[k] = op;
+            }
+            if (Object.keys(kept).some((k) => METHODS.has(k))) paths[p] = kept;
+        }
+        res.set('Cache-Control', 'public, max-age=3600').set('Access-Control-Allow-Origin', '*').json({ ...doc, paths });
+    });
     app.disable('x-powered-by');
     app.set('trust proxy', config.trustProxy);
     const release = require('openvibe-shared/release').createRelease({ service: 'deals', root: path.join(__dirname, '..') });
