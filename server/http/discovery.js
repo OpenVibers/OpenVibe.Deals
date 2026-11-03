@@ -161,14 +161,13 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
                     { title: 'Editors\' picks', url: abs('/picks') }, { title: 'Categories', url: abs('/c') }, { title: 'Shops', url: abs('/at') },
                     { title: 'Crowdfunding', url: abs('/crowdfunding'), note: 'one search across Kickstarter, Indiegogo, GoFundMe, Open Collective and more, and open-source campaigns with what they raised (/crowdfunding.json)', html: true },
                 ] },
+                { title: 'API', links: [{ title: 'OpenAPI document', url: abs('/openapi.json'), note: 'every public /api/v1 route' }] },
             ],
             optional: [
                 { title: 'Sitemap', url: abs('/sitemap.xml') },
                 { title: 'RSS', url: abs('/feed.xml') },
                 { title: 'Atom', url: abs('/atom.xml') },
-                { title: 'JSON Feed', url: abs('/feed.json') },
-                { title: 'Deal JSON', url: abs('/new'), note: 'append .json to any deal URL (/d/<slug>.json)' },
-                { title: 'Product JSON', url: abs('/sitemap.xml'), note: 'product pages are in the sitemap; append .json to any product URL (/p/<slug>.json)' },
+                { title: 'JSON Feed', url: abs('/feed.json'), note: 'any deal or product as JSON: append .json to its URL (/d/<slug>.json, /p/<slug>.json); product pages are in the sitemap' },
                 { title: 'Full text for language models', url: abs('/llms-full.txt') },
             ],
         }));
