@@ -2,6 +2,7 @@
 // What openvibe.deals tells an agent about itself (openvibe-shared/agent-layer): /.well-known/agent.json.
 // Every field is something this site really serves; Deals publishes no OpenAPI document or docs page, so
 // neither is named. Prices are observations with the time they were seen, on the page and in its twin.
+// 11-03 (SEO-3): this site serves /openapi.json now (the contracts' document for it), so it is named below.
 module.exports = {
     id: 'deals',
     name: 'OpenVibe.Deals',
@@ -9,6 +10,7 @@ module.exports = {
     home: 'https://openvibe.deals',
     site: 'openvibe.deals',
     api: '/api/v1',
+    openapi: '/openapi.json',
     policy: {
         auth: ['none', 'Network OIDC'],
         rateLimit: '240 API requests a minute per address; 60 form posts and 60 sign-in requests per 15 minutes',
