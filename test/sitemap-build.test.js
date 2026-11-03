@@ -74,9 +74,32 @@ const maps = (text) => [...text.matchAll(/<sitemap><loc>([^<]+)<\/loc>/g)].map((
     await s.get('/sitemap-0.xml');
     assert.strictEqual(seen.views, 20, 'reused inside ten minutes');
     clock.t += 2 * 60 * 1000;
-    await s.get('/sitemap-0.xml');
+    const expired = await s.get('/sitemap-0.xml');
+    assert.ok(expired.text.includes('https://deals.test/d/deal-19'), 'the expired build is served');
+    await new Promise((r) => setTimeout(r, 100));   // the next one is built behind it
     assert.strictEqual(seen.views, 40, 'rebuilt after');
     s.close();
+
+    // Served while rebuilding (11-03): an expired list answers at once; only the first build is waited on.
+    {
+        const { shared } = require('../server/http/discovery');
+        const t = { now: 0 };
+        let builds = 0; let release = null;
+        const get = shared(async () => { builds++; if (builds === 2) await new Promise((r) => { release = r; }); return builds; }, 1000, () => t.now);
+        assert.strictEqual(await get(), 1, 'the first build is waited on');
+        t.now = 5000;
+        assert.strictEqual(await get(), 1, 'expired: the last list at once');
+        assert.strictEqual(await get(), 1, 'and again while the next one is still building');
+        assert.strictEqual(builds, 2, 'one rebuild serves both readers');
+        release();
+        await new Promise((r) => setTimeout(r, 0));
+        assert.strictEqual(await get(), 2, 'then the new list');
+        let n = 0;
+        const none = shared(async () => ++n, 0, () => 0);
+        assert.deepStrictEqual([await none(), await none()], [1, 2], 'no ttl: every read waits on its own build, as before');
+        const failing = shared(async () => { throw new Error('db down'); }, 1000, () => 0);
+        await assert.rejects(failing(), /db down/, 'a cold build that fails fails the reader');
+    }
 
     // A catalog past 10,000 URLs: the index names every child and the children are the old single sitemap, split.
     const offerCount = 20005;
