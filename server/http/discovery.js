@@ -152,17 +152,23 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
             name: 'OpenVibe.Deals',
             summary: SITE_SUMMARY,
             details: 'A price on this site is an observation: it has a source and an observed_at time, and it is only claimed "as of" that time. Offers whose latest observation is older than the freshness window are marked stale and are noindex; expired offers are noindex; a price nobody stated is shown as "not stated" and omitted from structured data (never 0). Every deal page has a JSON twin at <deal URL>.json with the full observation history, sources, votes and indexability reasons. Imported and AI-assisted text is noindex until a person reviews it.',
+            markdown: true,
+            base: config.baseUrl,
             sections: [
                 { title: 'Start here', links: [
                     { title: 'Front page', url: abs('/'), note: 'editors\' picks, newest, ending soon, under $20, categories, shops and crowdfunding' },
                     { title: 'Hot deals', url: abs('/hot') }, { title: 'New deals', url: abs('/new') }, { title: 'Ending soon', url: abs('/ending') },
-                    { title: 'Editors\' picks', url: abs('/picks') }, { title: 'Categories', url: abs('/c') }, { title: 'Shops', url: abs('/at') }, { title: 'Crowdfunding', url: abs('/crowdfunding'), note: 'one search across Kickstarter, Indiegogo, GoFundMe, Open Collective and more, and open-source campaigns with what they raised (/crowdfunding.json)' }, { title: 'Sitemap', url: abs('/sitemap.xml') },
+                    { title: 'Editors\' picks', url: abs('/picks') }, { title: 'Categories', url: abs('/c') }, { title: 'Shops', url: abs('/at') },
+                    { title: 'Crowdfunding', url: abs('/crowdfunding'), note: 'one search across Kickstarter, Indiegogo, GoFundMe, Open Collective and more, and open-source campaigns with what they raised (/crowdfunding.json)', html: true },
                 ] },
-                { title: 'Feeds', links: [{ title: 'RSS', url: abs('/feed.xml') }, { title: 'Atom', url: abs('/atom.xml') }, { title: 'JSON Feed', url: abs('/feed.json') }] },
-                { title: 'Data', links: [
-                    { title: 'Deal JSON', url: abs('/new'), note: 'append .json to any deal URL (/d/<slug>.json)' },
-                    { title: 'Product JSON', url: abs('/sitemap.xml'), note: 'product pages are in the sitemap; append .json to any product URL (/p/<slug>.json)' },
-                ] },
+                { title: 'API', links: [{ title: 'OpenAPI document', url: abs('/openapi.json'), note: 'every public /api/v1 route' }] },
+            ],
+            optional: [
+                { title: 'Sitemap', url: abs('/sitemap.xml') },
+                { title: 'RSS', url: abs('/feed.xml') },
+                { title: 'Atom', url: abs('/atom.xml') },
+                { title: 'JSON Feed', url: abs('/feed.json'), note: 'any deal or product as JSON: append .json to its URL (/d/<slug>.json, /p/<slug>.json); product pages are in the sitemap' },
+                { title: 'Full text for language models', url: abs('/llms-full.txt') },
             ],
         }));
     });
