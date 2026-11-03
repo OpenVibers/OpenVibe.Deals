@@ -444,8 +444,31 @@ ${raw(pager ? paginationHtml(pager) : '')}`;
 function sellersPage({ sellers }) {
     return html`${raw(breadcrumbsHtml([{ name: 'Deals', url: '/' }, { name: 'Shops' }]))}
 <h1>Deals by shop</h1>
-<p class="lede">Every shop with a deal here, as the deal sources name it, the most deals first.</p>
+<p class="lede">Every shop with a deal here, as the deal sources name it, the most deals first. Run a shop? <a href="/stores">List your store's deals</a>.</p>
 ${sellers.length ? html`<ul class="seller-list">${sellers.map((x) => html`<li><a href="/at/${x.slug}">${x.seller}</a> <span class="meta">${x.count} deal${x.count === 1 ? '' : 's'}</span></li>`)}</ul>` : html`<p class="empty">No shops yet.</p>`}`;
+}
+
+/**
+ * /stores: how a shop lists its own deals here (open item 140, DEALS-LP). The claim lives on OpenVibe.Sources'
+ * merchant opt-in (a domain, a proof, a feed or sitemap); its items reach Deals through the ordinary Sources import.
+ */
+function storesPage({ merchantUrl }) {
+    return html`${raw(breadcrumbsHtml([{ name: 'Deals', url: '/' }, { name: 'Shops', url: '/at' }, { name: 'For stores' }]))}
+<h1>List your store's deals</h1>
+<p class="lede">If you run a shop, your own product pages can be a deal source here. No fee, no ads, and no change to your prices: Deals shows what your pages state.</p>
+<ol class="steps">
+<li><b>Claim your domain</b> on OpenVibe.Sources' merchant page, signed in with your OpenVibe account.</li>
+<li><b>Prove it is yours</b> with a DNS TXT record (<code>_openvibe-sources.&lt;your domain&gt;</code>) or a meta tag on your home page. Sources checks again every few minutes, or when you press "Check now".</li>
+<li><b>Name your product feed or sitemap.</b> Sources reads it politely: robots.txt on every request, spaced requests, nothing your robots.txt forbids.</li>
+<li><b>Your offers appear here</b> from the structured data on your product pages (schema.org Offer: price, currency, availability, and a list price when your page states one). A person reviews each new offer before search engines see it.</li>
+</ol>
+<p><a class="button" href="${merchantUrl}">Claim your store on OpenVibe.Sources</a></p>
+<h2>What we never do</h2>
+<ul class="plain">
+<li>Change your links to add a referral code, or guess a price your page does not state.</li>
+<li>Keep listing you after you withdraw: withdrawing on Sources stops the reading, and offers that have no source left are taken down.</li>
+<li>Rank you by payment: the order on Deals is the deals' own, by heat, by ending and by when they were seen.</li>
+</ul>`;
 }
 
 /** /c/:category: active deals in one category, as their sources name it. */
@@ -470,4 +493,4 @@ function message({ heading, text, action }) {
     return html`<h1>${heading}</h1><p>${text}</p>${action ? html`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}`;
 }
 
-module.exports = { offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, sellerPage, sellersPage, categoryPage, categoriesPage, message, priceText, when, ago };
+module.exports = { storesPage, offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, sellerPage, sellersPage, categoryPage, categoriesPage, message, priceText, when, ago };

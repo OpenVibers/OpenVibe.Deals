@@ -471,6 +471,12 @@ function createPages(ctx) {
     }
 
     router.get('/at', wrap(async (req, res) => send(req, res, 200, await sellersIndexPage(), { cacheable: true })));
+    // How a shop lists its own deals (DEALS-LP): the claim is Sources' merchant opt-in.
+    router.get('/stores', (req, res) => send(req, res, 200, {
+        title: 'List your store\'s deals', decision: pageDecision('/stores'), canonical: seo.canonicalUrl(config.baseUrl, '/stores'),
+        description: 'Run a shop? Claim your domain on OpenVibe.Sources, prove it is yours, name your feed or sitemap, and your own offers appear on OpenVibe.Deals. No fee, no referral codes.',
+        body: views.storesPage({ merchantUrl: `${config.sourcesPublicUrl || 'https://sources.openvibe.network'}/merchant` }),
+    }, { cacheable: true }));
 
     async function sellerPage(seller, page = 1) {
         const want = String(seller || '').toLowerCase();
