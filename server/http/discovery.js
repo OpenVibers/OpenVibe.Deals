@@ -49,14 +49,25 @@ async function mapLimit(items, limit, fn) {
     return out;
 }
 
-/** One build at a time, shared by the readers that ask while it runs, reused for ttlMs (0: the next read rebuilds). */
+/**
+ * One build at a time, shared by the readers that ask while it runs, reused for ttlMs (0: the next read rebuilds).
+ * With a ttl, an expired build is still served at once while the next one is made behind it: a cold build of every
+ * offer's view takes more than a minute, so the reader who found it expired (a crawler, mostly) waited past nginx's
+ * timeout and got the "Back in a moment" page (11-03). Only the first build of the process is waited for.
+ */
 function shared(build, ttlMs, now) {
     let value = null; let at = 0; let running = null;
-    return async () => {
-        if (value && now() - at < ttlMs) return value;
+    const rebuild = () => {
         if (!running) running = build().then((v) => { value = v; at = now(); return v; }).finally(() => { running = null; });
-        return await running;
+        return running;
     };
+    const get = async () => {
+        if (value && now() - at < ttlMs) return value;
+        if (value && ttlMs > 0) { rebuild().catch(() => { /* the last good list stays; the next read tries again */ }); return value; }
+        return await rebuild();
+    };
+    get.warm = () => rebuild();
+    return get;
 }
 
 function createDiscoveryRoutes({ config, store, publication, listings }) {
@@ -78,6 +89,13 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
         const pv = await publication.productView(p);
         return { loc: abs(publication.productPath(p)), lastmod: Math.max(p.updated_at, ...pv.offers.map((v) => Math.max(v.root.updated_at, v.latest ? v.latest.observed_at : 0))), decision: pv.decision };
     }), ttl, store.now);
+    // The first build of the process, made before any reader asks (DEALS_SITEMAP_WARM_MS after start; production 30 s):
+    // after it, every read is served at once (shared above).
+    const warmMs = Number(config.sitemapWarmMs) || 0;
+    if (warmMs > 0) {
+        const t = setTimeout(() => { offerEntries.warm().then(() => productEntries.warm()).catch(() => { /* a reader builds it then */ }); }, warmMs);
+        if (t.unref) t.unref();
+    }
 
     /** The lists a person browses (all indexable while they have something to show); lastmod = their newest deal. */
     async function pageEntries() {
@@ -192,4 +210,4 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     return router;
 }
 
-module.exports = { createDiscoveryRoutes };
+module.exports = { createDiscoveryRoutes, shared };
