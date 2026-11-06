@@ -8,6 +8,7 @@
  * an unknown one says "not stated". Nothing here calls a price "current".
  */
 const { html, raw, renderMarkdown, paginationHtml, breadcrumbsHtml } = require('openvibe-publishing/ssr');
+const kit = require('openvibe-shared/kit');
 const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/values');
 const { savingOf } = require('../domain/price-trend');
 const { remindLink } = require('./remind');
@@ -265,6 +266,8 @@ function offerPage({ v, dto, viewer, csrf, myVote, comments: c, mergedComments, 
     // "Remind me" for the moment the deal ends (plan L48 R3), beside the page's other actions; only when the end is
     // stated and still ahead.
     const remind = remindLink(r, { now: v.now, shop: v.store ? (v.store.name || v.store.domain) : '', url: urls.abs ? urls.abs(urls.offerPath(r)) : '', action: true });
+    const shareUrl = urls.abs ? urls.abs(urls.offerPath(r)) : urls.offerPath(r);
+    const shareText = r.ai_summary || null;
     const voteForm = signedIn && r.status !== 'disabled' ? (own ? html`<p class="meta">You posted this deal.</p>` : html`<form class="inline vote" method="post" action="${urls.offerPath(r)}/vote">${csrfField(csrf)}
 <button name="value" value="up"${myVote === 1 ? raw(' aria-pressed="true"') : ''}>▲ Hot</button>
 <button name="value" value="down"${myVote === -1 ? raw(' aria-pressed="true"') : ''}>▼ Cold</button>
@@ -278,7 +281,7 @@ ${r.status === 'expired' ? html`<p class="notice">This deal expired${r.expired_a
 <section class="latest" aria-label="Latest observation">
 ${latestLine(v)}
 ${v.freshness.state === 'stale' ? html`<p class="notice stale-notice">This price was last observed ${timeEl(v.latest.observed_at)}. Deals shows it as history, not as the price now. If you see the deal, report what the page says below.</p>` : ''}
-<p><a class="button" href="${safeHref(r.url)}" rel="nofollow noopener ugc">Go to the deal at ${v.store ? v.store.name || v.store.domain : 'the store'}</a>${remind ? raw(remind) : ''}</p>
+<p class="deal-actions"><a class="button" href="${safeHref(r.url)}" rel="nofollow noopener ugc">Go to the deal at ${v.store ? v.store.name || v.store.domain : 'the store'}</a>${raw(kit.share({ title: r.title, url: shareUrl, text: shareText || '' }))}${remind ? raw(remind) : ''}</p>
 ${r.expires_at && r.status === 'active' ? html`<p class="meta">Stated end: ${timeEl(r.expires_at)}</p>` : html`<p class="meta">End date: not stated</p>`}
 </section>
 <section class="votes" aria-label="Votes">

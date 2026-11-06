@@ -306,6 +306,7 @@ function createPages(ctx) {
             page: {
                 agent: true,
                 title: r.title,
+                styles: ['kit.css'],
                 description: `${views.priceText(v.latest)}${v.latest ? ` as of ${views.when(v.latest.observed_at)}` : ''}${r.seller ? ` at ${r.seller}` : v.store ? ` at ${v.store.name || v.store.domain}` : ''}.${r.description ? ` ${r.description.slice(0, 120)}` : ''}`,
                 decision: v.decision,
                 canonical,
