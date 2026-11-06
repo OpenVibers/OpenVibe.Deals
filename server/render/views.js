@@ -8,6 +8,7 @@
  * an unknown one says "not stated". Nothing here calls a price "current".
  */
 const { html, raw, renderMarkdown, paginationHtml, breadcrumbsHtml } = require('openvibe-publishing/ssr');
+const kit = require('openvibe-shared/kit');
 const { AVAILABILITY_LABEL, CONDITIONS, AVAILABILITY } = require('../domain/values');
 const { savingOf } = require('../domain/price-trend');
 const { remindLink } = require('./remind');
@@ -280,7 +281,7 @@ ${r.status === 'expired' ? html`<p class="notice">This deal expired${r.expired_a
 <section class="latest" aria-label="Latest observation">
 ${latestLine(v)}
 ${v.freshness.state === 'stale' ? html`<p class="notice stale-notice">This price was last observed ${timeEl(v.latest.observed_at)}. Deals shows it as history, not as the price now. If you see the deal, report what the page says below.</p>` : ''}
-<p class="deal-actions"><a class="button" href="${safeHref(r.url)}" rel="nofollow noopener ugc">Go to the deal at ${v.store ? v.store.name || v.store.domain : 'the store'}</a><button type="button" class="button" data-ov-share-sheet data-url="${shareUrl}" data-title="${r.title}"${shareText ? html` data-text="${shareText}"` : ''}>Share</button>${remind ? raw(remind) : ''}</p>
+<p class="deal-actions"><a class="button" href="${safeHref(r.url)}" rel="nofollow noopener ugc">Go to the deal at ${v.store ? v.store.name || v.store.domain : 'the store'}</a>${raw(kit.share({ title: r.title, url: shareUrl, text: shareText || '' }))}${remind ? raw(remind) : ''}</p>
 ${r.expires_at && r.status === 'active' ? html`<p class="meta">Stated end: ${timeEl(r.expires_at)}</p>` : html`<p class="meta">End date: not stated</p>`}
 </section>
 <section class="votes" aria-label="Votes">

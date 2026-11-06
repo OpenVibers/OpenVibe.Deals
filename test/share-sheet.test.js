@@ -17,6 +17,7 @@ const { boot } = require('./helpers/boot');
         assert.strictEqual((r.text.match(/data-ov-share-sheet/g) || []).length, 1, 'one Share button');
         assert.ok(r.text.includes(`data-url="https://openvibe.deals/d/${offer.slug}"`), 'the deal address');
         assert.ok(r.text.includes('data-title="Studio headphones"'), 'its title');
+        assert.ok(r.text.includes('class="ovk-btn ovk-btn--quiet"') && r.text.includes('<span>Share</span>'), 'the shared kit button');
         console.log('deals share sheet ok');
     } finally {
         await t.close();
