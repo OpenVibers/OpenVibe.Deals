@@ -48,6 +48,26 @@ const { boot, check, done, HOUR } = require('./helpers/boot');
         assert.strictEqual(rows, 4, 'no vote row was deleted, moved or copied');
     });
 
+    await check('the sitemap index entries agree with the page views for a merge group', async () => {
+        // The sitemap cache keeps compact entries, not full views (memory on the host, 2026-11-07). This pins that the
+        // cheap read still sees the group: lastmod, the gate's decision and the /llms-full.txt summary.
+        const { product } = await t.ctx.catalog.resolve({ name: 'Merged TV' });
+        await t.ctx.store.db.prepare('UPDATE deal_offers SET product_id = ? WHERE id IN (?, ?)').run(product.id, A.id, B.id);
+        const av = await t.ctx.publication.offerView(await t.ctx.reads.get(A.id));
+        const ae = await t.ctx.publication.indexEntry(await t.ctx.reads.get(A.id));
+        assert.strictEqual(ae.loc, `https://openvibe.deals/d/${A.slug}`);
+        assert.strictEqual(ae.lastmod, Math.max(av.latest.observed_at, av.root.updated_at));
+        assert.strictEqual(ae.decision.indexable, av.decision.indexable);
+        assert.match(ae.text, /389 USD at shop\.example/, 'the group latest observation and the store label');
+
+        const prod = await t.ctx.catalog.product(product.id);
+        const pv = await t.ctx.publication.productView(prod);
+        const pe = await t.ctx.publication.productIndexEntry(prod);
+        assert.strictEqual(pe.loc, `https://openvibe.deals/p/${prod.slug}`);
+        assert.strictEqual(pe.lastmod, Math.max(prod.updated_at, ...pv.offers.map((v) => Math.max(v.root.updated_at, v.latest ? v.latest.observed_at : 0))));
+        assert.strictEqual(pe.decision.indexable, pv.decision.indexable);
+    });
+
     await check('the merged listing redirects to the canonical one (page and JSON), and Search drops it', async () => {
         const page = await t.get(`/d/${B.slug}`);
         assert.strictEqual(page.status, 301);

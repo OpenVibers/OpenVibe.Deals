@@ -227,7 +227,61 @@ function createPublication({ config, store, reads, catalog }) {
         });
     }
 
-    return { abs, offerPath, productPath, storePath, sellerPath, categoryPath, freshness, decideOffer, decideProduct, offerView, cardView, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd };
+    /** A short, whitespace-collapsed summary; the full source text is never included. */
+    const brief = (value, max = 200) => String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, max);
+
+    /**
+     * What an index artifact (a sitemap chunk, /llms-full.txt) keeps about one offer: its URL, when it last changed,
+     * whether a crawler may index it, and the short summary /llms-full.txt prints. Two reads (the merge group and its
+     * latest observation) instead of offerView's ten, and nothing that grows with the group's price history is
+     * retained; the entry measured ~0.6 KB. The sitemap cache holds one per offer for DEALS_SITEMAP_TTL_MS; keeping
+     * the full views instead cost ~6.7 KB an offer — ~340 MB of a 50,000-offer catalog, held twice over once products
+     * were built (2026-11-07: the Deals process at 667 MB-923 MB, peaking at 2 GB).
+     */
+    async function indexEntry(offer, now = store.now()) {
+        const root = offer.merged_into ? await reads.root(offer) : offer;
+        const ids = await reads.groupIds(root.id);
+        const latest = await reads.latestObservation(ids);
+        // listings.indexable() joins the store onto each row; any other caller gets it looked up here.
+        const s = root.store_domain !== undefined
+            ? (root.store_domain ? { name: root.store_name, domain: root.store_domain } : null)
+            : (root.store_id ? await catalog.store(root.store_id) : null);
+        const price = latest && latest.price != null && latest.currency ? `${latest.price} ${latest.currency}` : '';
+        return {
+            loc: abs(offerPath(root)),
+            lastmod: latest ? Math.max(latest.observed_at, root.updated_at) : root.updated_at,
+            decision: decideOffer(root, latest, now),
+            title: root.title,
+            text: [brief(root.description), price, s ? `at ${s.name || s.domain}` : ''].filter(Boolean).join(' '),
+        };
+    }
+
+    // A product's lastmod and freshest active observation in one read: each offer's group latest observation (a merge
+    // group shares one price history), without loading every offer's view. The same facts productView derives below.
+    const productIndex = store.db.prepare(`SELECT MAX(GREATEST(o.updated_at, COALESCE(l.observed_at, 0))) AS lastmod,
+                                                  MAX(CASE WHEN o.status = 'active' THEN l.observed_at END) AS active_latest
+                                             FROM deal_offers o
+                                             LEFT JOIN LATERAL (
+                                                 WITH RECURSIVE g(id, depth) AS (SELECT o.id, 0 UNION
+                                                     SELECT c.id, g.depth + 1 FROM deal_offers c JOIN g ON c.merged_into = g.id WHERE g.depth < 50)
+                                                 SELECT p.observed_at FROM deal_price_observations p JOIN deal_offer_sources s ON s.id = p.source_id
+                                                  WHERE p.offer_id IN (SELECT id FROM g) AND s.removed_at IS NULL
+                                                  ORDER BY p.observed_at DESC, p.seq DESC LIMIT 1) l ON true
+                                            WHERE o.product_id = ? AND o.merged_into IS NULL AND o.status <> 'disabled'`);
+
+    /** What the sitemaps keep about one product page: its URL, when it last changed, whether it is indexable. */
+    async function productIndexEntry(product, now = store.now()) {
+        const r = await productIndex.get(product.id);
+        const activeLatest = r.active_latest == null ? null : Number(r.active_latest);
+        const freshest = activeLatest != null && now - activeLatest <= config.freshnessMs ? activeLatest : null;
+        return {
+            loc: abs(productPath(product)),
+            lastmod: Math.max(product.updated_at, Number(r.lastmod) || 0),
+            decision: decideProduct(product, freshest, now),
+        };
+    }
+
+    return { abs, offerPath, productPath, storePath, sellerPath, categoryPath, freshness, decideOffer, decideProduct, offerView, cardView, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd, indexEntry, productIndexEntry };
 }
 
 module.exports = { createPublication };
