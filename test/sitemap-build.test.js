@@ -25,15 +25,13 @@ function makeOffers(count) {
 function routes(ttlMs, clock, { offerCount = 20, products = [] } = {}) {
     const offers = makeOffers(offerCount);
     const publication = {
-        async offerView(o) {
+        async indexEntry(o) {
             seen.now++; seen.views++; seen.max = Math.max(seen.max, seen.now);
             await tick();
             seen.now--;
-            return { root: { title: o.slug, description: '' }, latest: { observed_at: o.updated_at, price: '1', currency: 'USD' }, decision: indexable };
+            return { loc: `https://deals.test/d/${o.slug}`, lastmod: o.updated_at, decision: indexable, title: o.slug, text: '1 USD' };
         },
-        offerPath: (o) => `/d/${o.slug}`,
-        async productView() { return { offers: [], decision: indexable }; },
-        productPath: (p) => `/p/${p.slug}`,
+        async productIndexEntry(p) { return { loc: `https://deals.test/p/${p.slug}`, lastmod: p.updated_at, decision: indexable }; },
     };
     const listings = {
         indexable: async () => offers, products: async () => products, newest: async () => [], countActive: async () => offers.length,

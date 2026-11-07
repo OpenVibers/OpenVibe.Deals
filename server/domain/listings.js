@@ -38,7 +38,12 @@ function createListings({ store }) {
         sellers: db.prepare(`SELECT seller, COUNT(*) AS n, MAX(created_at) AS latest FROM deal_offers WHERE seller IS NOT NULL AND merged_into IS NULL AND status <> 'disabled' GROUP BY seller ORDER BY n DESC, seller LIMIT 2000`),
         bySeller: db.prepare(`SELECT * FROM deal_offers WHERE seller = ? AND merged_into IS NULL AND status <> 'disabled' ORDER BY status = 'active' DESC, created_at DESC LIMIT ? OFFSET ?`),
         countSeller: db.prepare(`SELECT COUNT(*) AS n FROM deal_offers WHERE seller = ? AND merged_into IS NULL AND status <> 'disabled'`),
-        indexable: db.prepare(`SELECT * FROM deal_offers WHERE merged_into IS NULL AND status <> 'disabled' ORDER BY created_at DESC LIMIT 50000`),
+        // The store's name and domain come along: an index entry needs its label, and one join is cheaper than a
+        // lookup per offer (a 50,000-offer sitemap build was 50,000 extra queries).
+        indexable: db.prepare(`SELECT o.*, s.name AS store_name, s.domain AS store_domain
+                                 FROM deal_offers o LEFT JOIN deal_stores s ON s.id = o.store_id
+                                WHERE o.merged_into IS NULL AND o.status <> 'disabled'
+                                ORDER BY o.created_at DESC LIMIT 50000`),
         // The canonical offers with an observation that came of age (freshnessMs) in a window: their freshness, and so
         // their index document, may have changed with time alone. A superset is fine: an unchanged document sends nothing.
         agedInto: db.prepare(`SELECT r.* FROM deal_offers r WHERE r.merged_into IS NULL AND r.status <> 'disabled' AND r.id IN (

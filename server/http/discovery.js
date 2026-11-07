@@ -49,6 +49,11 @@ async function mapLimit(items, limit, fn) {
     return out;
 }
 
+// The sitemap cache keeps a summary for at most this many indexable offers. /llms-full.txt truncates at 512 KB of
+// text (about 3,500 entries), so the rest would never be printed; a 50,000-offer catalog kept 10 MB of summaries
+// it could not use.
+const LLMS_SUMMARIES_MAX = 10000;
+
 /**
  * One build at a time, shared by the readers that ask while it runs, reused for ttlMs (0: the next read rebuilds).
  * With a ttl, an expired build is still served at once while the next one is made behind it: a cold build of every
@@ -74,21 +79,26 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     const router = express.Router();
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
     const xml = (res, body) => res.type('application/xml').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(body);
-    /** A short, whitespace-collapsed summary; the full source text is never included. */
-    const brief = (value, max = 200) => String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, max);
 
-    // Every offer's and product's page view, for the sitemaps and /llms-full.txt: built VIEWS_PARALLEL at a time, once
-    // for concurrent readers, reused for config.sitemapTtlMs. All at once, each /sitemap.xml queued thousands of
+    // Every offer's and product's index entry, for the sitemaps and /llms-full.txt: built VIEWS_PARALLEL at a time,
+    // once for concurrent readers, reused for config.sitemapTtlMs. All at once, each /sitemap.xml queued thousands of
     // queries on the pool for a minute (2026-10-23), and every page waited behind them.
+    //
+    // The cache holds compact entries (url, lastmod, decision, and a summary for the first LLMS_SUMMARIES_MAX
+    // indexable offers), never the page views: full views cost ~6.7 KB an offer, so a 50,000-offer catalog held
+    // ~340 MB and rebuilding it held another copy (667 MB resident, 2 GB peak, 2026-11-07). An entry measured ~0.6 KB,
+    // and the cache is bounded by the listings' own 50,000-offer and 50,000-product caps.
     const ttl = Number(config.sitemapTtlMs) || 0;
-    const offerEntries = shared(async () => mapLimit(await listings.indexable(), VIEWS_PARALLEL, async (o) => {
-        const v = await publication.offerView(o);
-        return { offer: o, view: v, loc: abs(publication.offerPath(o)), lastmod: v.latest ? Math.max(v.latest.observed_at, o.updated_at) : o.updated_at, decision: v.decision };
-    }), ttl, store.now);
-    const productEntries = shared(async () => mapLimit(await listings.products(), VIEWS_PARALLEL, async (p) => {
-        const pv = await publication.productView(p);
-        return { loc: abs(publication.productPath(p)), lastmod: Math.max(p.updated_at, ...pv.offers.map((v) => Math.max(v.root.updated_at, v.latest ? v.latest.observed_at : 0))), decision: pv.decision };
-    }), ttl, store.now);
+    const offerEntries = shared(async () => {
+        const entries = await mapLimit(await listings.indexable(), VIEWS_PARALLEL, (o) => publication.indexEntry(o));
+        let kept = 0;
+        for (const e of entries) {
+            if (e.decision.indexable && ++kept <= LLMS_SUMMARIES_MAX) continue;
+            delete e.text; delete e.title;
+        }
+        return entries;
+    }, ttl, store.now);
+    const productEntries = shared(async () => mapLimit(await listings.products(), VIEWS_PARALLEL, (p) => publication.productIndexEntry(p)), ttl, store.now);
     // The first build of the process, made before any reader asks (DEALS_SITEMAP_WARM_MS after start; production 30 s):
     // after it, every read is served at once (shared above).
     const warmMs = Number(config.sitemapWarmMs) || 0;
@@ -180,10 +190,7 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
         const pages = [];
         for (const e of entries) {
             if (!e.decision.indexable) continue;
-            const v = e.view;
-            const price = v.latest ? `${v.latest.price} ${v.latest.currency}` : '';
-            const text = [brief(v.root.description), price, v.store ? `at ${v.store.name || v.store.domain}` : ''].filter(Boolean).join(' ');
-            pages.push({ title: v.root.title, url: e.loc, text });
+            pages.push({ title: e.title, url: e.loc, text: e.text });
         }
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsFull({
             site: 'OpenVibe.Deals',
