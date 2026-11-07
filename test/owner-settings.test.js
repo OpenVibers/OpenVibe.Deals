@@ -34,7 +34,7 @@ const ENV_KEY = 'woot-env-key';
         assert.ok(f, 'woot_api_key exists');
         assert.ok(f.title && f.title.length >= 3);
         assert.ok(f.description && f.description.length >= 30);
-        assert.strictEqual(f['x-owner-input'].group, 'Data sources');
+        assert.strictEqual(f['x-owner-input'].group, 'data-sources');
         assert.ok(f['x-owner-input'].unlocks.length > 20);
         assert.strictEqual(f['x-owner-input'].get_it_at, 'https://developer.woot.com/');
         assert.strictEqual(f['x-owner-input'].test, true);

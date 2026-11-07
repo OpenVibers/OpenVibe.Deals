@@ -29,7 +29,7 @@ const SCHEMA = Object.freeze({
             type: 'string', title: 'Woot API key', 'x-group': GROUP,
             description: 'The developer key for Woot\'s own API. It lets Deals read Woot deals directly instead of crawling their pages; without it Woot is only covered by the crawler.',
             'x-owner-input': {
-                group: GROUP,
+                group: 'data-sources',
                 unlocks: 'Woot deals can be read from Woot\'s API, with current prices and stock instead of a page crawl.',
                 get_it_at: 'https://developer.woot.com/',
                 get_it_how: 'Request a developer key on the Woot developer portal and paste the key it gives you here.',
