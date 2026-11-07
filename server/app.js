@@ -42,6 +42,8 @@ const { createPages } = require('./http/pages');
 const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
 const { createEvents } = require('./http/events');
+const settingsLib = require('./settings');
+const { verifyServiceToken } = require('openvibe-sdk/auth');
 const accountDataLib = require('./domain/account-data');
 const { createNetworkSender } = require('openvibe-sdk/account-data');
 const { createDealsReadiness } = require('./observability');
@@ -116,7 +118,21 @@ async function createApp(opts = {}) {
         ? createNetworkSender({ networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl })
         : null);
 
-    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, sharing, limits, access, offers, flags, votes, listings, importer, campaigns, auth, viewers, worker, indexnow, accountData, accountSend };
+    // D11 owner settings (deals.data_sources): created before the app mounts /internal/config. A failure leaves
+    // Deals serving (the Woot key falls back to the environment) and says why in the log.
+    let settings = null;
+    if (opts.settings) settings = opts.settings;
+    else {
+        try {
+            const made = settingsLib.createSettings({ db: store.db, env: opts.env || process.env, log });
+            await made.ready;
+            settings = settingsLib.activate(made);
+        } catch (err) {
+            log.warn('[OpenVibe.Deals] owner settings unavailable, the data-source keys fall back to the environment:', err && err.message);
+        }
+    }
+
+    const ctx = { config, store, settings, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, sharing, limits, access, offers, flags, votes, listings, importer, campaigns, auth, viewers, worker, indexnow, accountData, accountSend };
 
     const app = express();
     // GET /openapi.json (SEO-3): this service's public API as OpenAPI 3.1, generated from the contracts
@@ -214,6 +230,32 @@ async function createApp(opts = {}) {
     // ── Events consumer, API ────────────────────────────────
     // Never per-actor limited: Events pushes at its own pace, and a 429 would only make it retry and fall behind.
     app.use(createEvents({ config, store, importer, accountData: ctx.accountData, accountSend: ctx.accountSend }));
+
+    // ── D11 owner settings (openvibe-shared/config): Network's admin proxy, acting for the owner, reads and
+    // writes deals.data_sources (the Woot API key). Loopback only, guarded by deals.config.manage; a secret change
+    // needs X-OV-Fresh: 1, and the test route reads one deal without echoing the key.
+    if (settings) {
+        const configGuard = async (req, res, next) => {
+            if (req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.headers['cf-connecting-ip']) {
+                return res.status(404).json({ code: 'deals.not_found', error: 'no such route' });
+            }
+            const header = String(req.headers.authorization || '');
+            if (!header.startsWith('Bearer ')) return res.status(401).json({ code: 'token.missing', error: 'a service token is required' });
+            const r = await verifyServiceToken(header.slice(7).trim(), {
+                jwks: `${config.networkInternalUrl}/api/.well-known/jwks`, issuer: config.networkUrl, audience: 'openvibe.deals',
+                contracts: require('openvibe-contracts'),
+            });
+            if (!r.ok) return res.status(r.code === 'token.unavailable' ? 503 : 401).json({ code: r.code, error: r.reason || 'the token does not verify' });
+            const contracts = require('openvibe-contracts');
+            const decision = contracts.capabilities.check(r.claims, 'deals.config.manage');
+            const granted = decision.allowed || contracts.capabilities.grants(r.claims.cap, 'deals.config.manage');
+            if (!granted) return res.status(403).json({ code: 'capability.denied', error: 'deals.config.manage is not granted' });
+            req.principal = { sub: r.claims.sub, cap: r.claims.cap, jti: r.claims.jti };
+            return next();
+        };
+        app.use('/internal/config', express.json({ limit: '64kb' }));
+        settings.mount(app, { guard: configGuard, log });
+    }
     // ── /api/v1/watch/:id/share — the one Share sheet's API (openvibe-sdk/share) ──
     // GET/PUT .../share, .../share/requests, .../share/transfer[/accept|decline|cancel], GET /api/v1/share/people
     // and /api/v1/shared-with-me. Access is still decided by canView on every read path; the router answers only
