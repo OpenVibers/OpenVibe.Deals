@@ -30,6 +30,7 @@ const { createPublication } = require('./domain/publication');
 const { createIndexing } = require('./domain/indexing');
 const { createHotness } = require('./domain/hotness');
 const { createWatches } = require('./domain/watches');
+const { createSharing } = require('./sharing');
 const { createLimits } = require('./domain/limits');
 const { createAccess } = require('./domain/access');
 const { createOffers } = require('./domain/offers');
@@ -82,7 +83,9 @@ async function createApp(opts = {}) {
     });
     const indexing = createIndexing({ config, store, publication, outbox, catalog, indexnow });
     const hotness = createHotness({ store, reads });
-    const watches = createWatches({ config, store, reads, catalog, publication, outbox });
+    // The one sharing system (design 2026-11-06): a watch is its owner's until the Share sheet says otherwise.
+    const sharing = opts.sharing || createSharing({ db: store.db, config, fetchImpl, log });
+    const watches = createWatches({ config, store, reads, catalog, publication, outbox, sharing });
     const limits = createLimits({ config, store });
     const access = createAccess();
     const offers = createOffers({ config, store, reads, catalog, publication, indexing, hotness, watches, limits, access, community, outbox });
@@ -113,7 +116,7 @@ async function createApp(opts = {}) {
         ? createNetworkSender({ networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl })
         : null);
 
-    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, limits, access, offers, flags, votes, listings, importer, campaigns, auth, viewers, worker, indexnow, accountData, accountSend };
+    const ctx = { config, store, outbox, people, community, sources, reads, catalog, publication, indexing, hotness, watches, sharing, limits, access, offers, flags, votes, listings, importer, campaigns, auth, viewers, worker, indexnow, accountData, accountSend };
 
     const app = express();
     // GET /openapi.json (SEO-3): this service's public API as OpenAPI 3.1, generated from the contracts
@@ -211,6 +214,27 @@ async function createApp(opts = {}) {
     // ── Events consumer, API ────────────────────────────────
     // Never per-actor limited: Events pushes at its own pace, and a 429 would only make it retry and fall behind.
     app.use(createEvents({ config, store, importer, accountData: ctx.accountData, accountSend: ctx.accountSend }));
+    // ── /api/v1/watch/:id/share — the one Share sheet's API (openvibe-sdk/share) ──
+    // GET/PUT .../share, .../share/requests, .../share/transfer[/accept|decline|cancel], GET /api/v1/share/people
+    // and /api/v1/shared-with-me. Access is still decided by canView on every read path; the router answers only
+    // its own paths.
+    {
+        const shareApi = express.Router();
+        shareApi.use(ctx.viewers.middleware());
+        shareApi.use(ctx.sharing.shares.router({
+            service: 'deals',
+            authenticate: (req) => ctx.sharing.shareViewer(req.viewer),
+            describe: ctx.sharing.describe,
+        }));
+        const SHARE_PATH = /^\/api\/v1\/(?:shared-with-me$|share\/people$|[^/]+\/[^/]+\/share(?:\/|$))/;
+        app.use((req, res, next) => (SHARE_PATH.test(req.path) ? shareApi(req, res, next) : next()));
+    }
+    // Expire members and transfers and send queued share events/notifications. Unref'd: it never holds a test open.
+    if (opts.startSharingWorker !== false) {
+        const timer = setInterval(() => { ctx.sharing.work().catch(() => { /* logged inside */ }); }, 15_000);
+        if (timer.unref) timer.unref();
+        app.locals.sharingTimer = timer;
+    }
     app.use('/api/v1', rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false }), createApi(ctx));
 
     // ── Discovery, public pages ─────────────────────────────

@@ -210,6 +210,13 @@ function createApi(ctx) {
 
     router.get('/watches', guard('deals.watch.read'), run(async (req) => { needSubject(req); return { watches: await Promise.all((await watches.list(req.viewer.subject)).map(watches.dto)) }; }));
 
+    // One watch's data: its owner's, or a reader it was shared with (design 2026-11-06, step 6). A signed-out reader
+    // of an Anyone-with-the-link watch needs no capability; the check is canView inside watches.view.
+    router.get('/watches/:id', guard('deals.watch.read'), run(async (req) => {
+        const out = await watches.mustView(req.viewer, req.params.id);
+        return { watch: await watches.dto(out.watch) };
+    }));
+
     router.post('/watches', guard('deals.watch.create'), B('deals.watch'), jsonBody, run(async (req) => {
         needSubject(req);
         return { watch: await watches.dto(await watches.create(req.viewer.subject, req.body || {})) };

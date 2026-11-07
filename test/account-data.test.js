@@ -43,7 +43,7 @@ const envelope = (id, type, payload) => ({ event: { event_id: id, event_type: ty
                 tables: TABLES,
                
                 taskKeyed: ["deal_watches"],
-                exempt: {"account_data_events":"the ledger of requests itself: which export and deletion Deals applied","deal_index_revisions":"owner is the search-index document's owner (type/id), not a person; the row holds a revision and hash"},
+                exempt: {"account_data_events":"the ledger of requests itself: which export and deletion Deals applied","deal_index_revisions":"owner is the search-index document's owner (type/id), not a person; the row holds a revision and hash","share_members":"the SDK's own sharing model: subject is an added person, erased with the watch by extraErase","share_access_requests":"the SDK's own sharing model: subject is the person who asked, erased by extraErase","deals_share_defaults":"a person's own default for new watches, erased by extraErase"},
             });
             assert.deepStrictEqual(missing, [], `a table with a person column is neither covered nor exempted: ${missing.join(', ')}`);
         } finally { await d.close(); }

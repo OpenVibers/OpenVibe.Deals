@@ -64,6 +64,26 @@ async function extraErase(t, subjects, counts) {
         if (d.shared_offers && typeof d.shared_offers === 'object') for (const s of subjects) delete d.shared_offers[s];
         counts.add(counts.retained, 'tombstones', await t.exec('UPDATE deal_flags SET details = $1 WHERE id = $2', [JSON.stringify(d), f.id]));
     }
+    // A share row names its owner and its members by canonical subject, which a table map cannot cover: the watch's
+    // own rows go, and so must its share row and everyone it named, or a deleted account would linger in somebody
+    // else's member list. Children first: members, transfers and requests point at shares.
+    for (const subject of subjects) {
+        const id = String(subject).replace(/^user:/, '');
+        await t.exec('DELETE FROM deals_share_defaults WHERE subject = $1', [id]);
+        await t.exec("DELETE FROM share_members WHERE service='deals' AND subject->>'id' = $1", [id]);
+        await t.exec("DELETE FROM share_transfers WHERE service='deals' AND (from_subject->>'id' = $1 OR to_subject->>'id' = $1)", [id]);
+        await t.exec("DELETE FROM share_access_requests WHERE service='deals' AND subject->>'id' = $1", [id]);
+    }
+    for (const subject of subjects) {
+        const id = String(subject).replace(/^user:/, '');
+        const owned = await t.many("SELECT kind, resource_id FROM shares WHERE service='deals' AND owner_subject->>'id' = $1", [id]);
+        for (const row of owned) {
+            await t.exec("DELETE FROM share_members WHERE service='deals' AND kind=$1 AND resource_id=$2", [row.kind, row.resource_id]);
+            await t.exec("DELETE FROM share_transfers WHERE service='deals' AND kind=$1 AND resource_id=$2", [row.kind, row.resource_id]);
+            await t.exec("DELETE FROM share_access_requests WHERE service='deals' AND kind=$1 AND resource_id=$2", [row.kind, row.resource_id]);
+            await t.exec("DELETE FROM shares WHERE service='deals' AND kind=$1 AND resource_id=$2", [row.kind, row.resource_id]);
+        }
+    }
 }
 
 /** The account-data handle for Deals' database (server/db.js, store.db). */

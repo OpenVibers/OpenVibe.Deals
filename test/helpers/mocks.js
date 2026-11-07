@@ -62,6 +62,13 @@ async function startNetwork() {
             }
             return json(200, { results });
         }
+        if (req.url.startsWith('/internal/identity/resolve') && req.method === 'GET') {
+            const name = String(new URL(req.url, 'http://x').searchParams.get('username') || '').toLowerCase();
+            const found = [...directory.values()].find((u) => String(u.username).toLowerCase() === name);
+            if (found) return json(200, { subject: { type: 'user', id: found.subject }, username: found.username, display_name: found.display_name });
+            return json(404, { code: 'identity.not_found' });
+        }
+        if (req.url === '/internal/notifications/push' && req.method === 'POST') return json(200, { ok: true });
         return json(404, { error: 'not found' });
     });
     issuer = srv.url;
