@@ -25,6 +25,7 @@ const CAPABILITIES = Object.freeze({
     WATCH_DELETE: 'deals.watch.delete',
     PRODUCT_RESOLVE: 'deals.product.resolve',
     FLAG_CREATE: 'deals.flag.create',
+    CONFIG_MANAGE: 'deals.config.manage',     // the owner's Setup tab through Network's admin proxy
 });
 
 /** → { allowed, code, reason } like capabilities.check(). */
