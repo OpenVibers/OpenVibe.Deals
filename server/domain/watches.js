@@ -25,7 +25,7 @@ const { ApiError, newId, text, tokens, parseAmount, parseCurrency, iso } = requi
 
 const KINDS = ['keyword', 'product', 'price_below', 'search'];
 
-function createWatches({ config, store, reads, catalog, publication, outbox }) {
+function createWatches({ config, store, reads, catalog, publication, outbox, sharing }) {
     const { db } = store;
     const q = {
         get: db.prepare('SELECT * FROM deal_watches WHERE id = ?'),
@@ -68,6 +68,11 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
             Object.assign(row, { product_id: product ? product.id : null, query: product ? null : query, max_price: amount.text, max_price_num: amount.num, currency });
         }
         await q.insert.run(row);
+        // A new watch starts at the person's default (design rule 1); its Share sheet changes just this one.
+        if (sharing) {
+            const audience = await sharing.defaultOf(subject);
+            await sharing.register(subject, row.id, audience);
+        }
         return await q.get.get(row.id);
     }
 
@@ -75,7 +80,30 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
         const w = await q.get.get(String(id || ''));
         if (!w || w.deleted_at || (w.subject !== subject && !staff)) throw new ApiError(404, 'watch.not_found', 'No such watch');
         await q.remove.run(store.now(), w.id);
+        if (sharing) await sharing.forget(w.id);
         return { id: w.id, deleted: true };
+    }
+
+    /**
+     * A watch a viewer may read: the owner's, or one shared with them (design 2026-11-06, step 6). A missing share row
+     * falls back to the old rule — the owner alone. Returns null when it does not exist, is deleted, or is not this
+     * viewer's to see; the caller answers 404.
+     */
+    async function view(viewer, id) {
+        const w = await q.get.get(String(id || ''));
+        if (!w || w.deleted_at) return null;
+        const subject = viewer && (viewer.kind === 'user' || viewer.kind === 'service') ? viewer.subject : null;
+        const mine = Boolean(subject && w.subject === subject);
+        if (mine) return { watch: w, mine: true };
+        if (!sharing) return null;
+        if (!await sharing.canView(viewer, w.id)) return null;
+        return { watch: w, mine: false };
+    }
+
+    async function mustView(viewer, id) {
+        const out = await view(viewer, id);
+        if (!out) throw new ApiError(404, 'watch.not_found', 'No such watch');
+        return out;
     }
 
     function offerText(v) {
@@ -147,7 +175,7 @@ function createWatches({ config, store, reads, catalog, publication, outbox }) {
         };
     }
 
-    return { create, remove, onObservation, list: async (subject) => await q.listFor.all(subject), get: async (id) => await q.get.get(id), dto, KINDS };
+    return { create, remove, view, mustView, onObservation, list: async (subject) => await q.listFor.all(subject), get: async (id) => await q.get.get(id), dto, KINDS };
 }
 
 module.exports = { createWatches, KINDS };

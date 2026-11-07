@@ -41,6 +41,10 @@ const { ttlCache } = require('./ttl-cache');
 
 const PER_PAGE = 25;
 
+// The one Share sheet (openvibe-shared ov-share.js): its stylesheet and script, and the gate that draws itself from
+// markup. A page with a Share button needs the shared navbar, which loads the sheet on the first press.
+const SHARE_HEAD = `<link rel="stylesheet" href="${require('openvibe-shared/serve').url('ov-share.css')}"><script src="${require('openvibe-shared/serve').url('ov-share.js')}" defer></script>`;
+
 function createPages(ctx) {
     const { config, store, reads, catalog, publication, listings, offers, votes, watches, flags, community, access, viewers, actorLimits } = ctx;
     const router = express.Router();
@@ -594,12 +598,47 @@ function createPages(ctx) {
     });
     async function watchesPage(req, res, status = 200, { error, notice } = {}) {
         const list = await Promise.all((await watches.list(req.viewer.subject)).map(watches.dto));
-        send(req, res, status, { title: 'Watches', decision: pageDecision('/watches', { indexable: false }), body: views.watchesPage({ csrf: csrf(req), watches: list, error, notice, urls, values: watchValues(req.query) }) });
+        const defaultAudience = ctx.sharing ? await ctx.sharing.defaultOf(req.viewer.subject).catch(() => 'private') : 'private';
+        send(req, res, status, { title: 'Watches', decision: pageDecision('/watches', { indexable: false }), head: SHARE_HEAD, body: views.watchesPage({ csrf: csrf(req), watches: list, error, notice, urls, values: watchValues(req.query), defaultAudience }) });
     }
 
     router.get('/watches', wrap(async (req, res) => {
         if (!signedIn(req)) return send(req, res, 200, { title: 'Watches', decision: pageDecision('/watches', { indexable: false }), body: views.message({ heading: 'Watches', text: 'Sign in to watch keywords, products and prices, and to save searches.', action: { href: '/auth/login?next=%2Fwatches', label: 'Sign in' } }) });
         await watchesPage(req, res);
+    }));
+
+    // The person's default for new watches, and "apply to all" (design rule 2).
+    router.post('/watches/defaults', form, wrap(async (req, res) => {
+        if (!formGuard(req, res, '/watches')) return;
+        if (ctx.sharing) {
+            const audience = ['private', 'people', 'link', 'public'].includes(req.body.audience) ? req.body.audience : 'private';
+            await ctx.sharing.setDefault(req.viewer.subject, audience, { applyAll: String(req.body.apply_all || '') === '1' })
+                .catch((err) => ctx.log.warn('[Deals] the watch default was not saved:', err.message));
+        }
+        res.redirect(303, '/watches');
+    }));
+
+    // One watch's own page (design 2026-11-06, step 6): its owner's, or a reader it was shared with. A watch shared with
+    // specific people answers the gate to everyone else and never shows what it looks for.
+    router.get('/watches/:id', wrap(async (req, res) => {
+        const id = String(req.params.id || '');
+        const out = await watches.view(req.viewer, id);
+        if (!out) {
+            const audience = ctx.sharing ? await ctx.sharing.audienceOf(id).catch(() => null) : null;
+            if (audience === 'people') {
+                const signedInUser = signedIn(req) ? req.viewer : null;
+                return send(req, res, 404, {
+                    title: 'A watch shared with specific people', decision: pageDecision('/watches', { indexable: false }), head: SHARE_HEAD,
+                    body: views.watchGate({ id, signedInAs: signedInUser && signedInUser.user ? signedInUser.user.username || '' : '', signInUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}` }),
+                });
+            }
+            return send(req, res, 404, { title: 'Not found', decision: pageDecision('/watches', { indexable: false }), body: views.message({ heading: 'Not found', text: 'There is no watch at this address.' }) });
+        }
+        const audience = ctx.sharing ? await ctx.sharing.audienceOf(id).catch(() => null) : null;
+        send(req, res, 200, {
+            title: out.watch.kind === 'search' ? 'Saved search' : 'Watch', decision: pageDecision('/watches', { indexable: false }), head: SHARE_HEAD,
+            body: views.watchPage({ watch: await watches.dto(out.watch), mine: out.mine, audience, csrf: csrf(req), urls }),
+        });
     }));
 
     router.post('/watches', B('deals.watch'), form, wrap(async (req, res) => {

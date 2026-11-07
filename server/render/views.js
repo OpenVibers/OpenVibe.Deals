@@ -379,16 +379,27 @@ ${error ? html`<p class="notice error" role="alert">${error}</p>` : ''}
 </form>`;
 }
 
-function watchesPage({ csrf, watches, error, notice, urls, values = {} }) {
+function watchesPage({ csrf, watches, error, notice, urls, values = {}, defaultAudience = 'private' }) {
     // Arriving from a shop's "Alert me" (/watches?kind=keyword&query=zappos.com): the form says so, filled in.
     const kindOpt = (k, label) => html`<option value="${k}"${values.kind === k ? raw(' selected') : ''}>${label}</option>`;
+    const audienceText = { private: 'Only me', people: 'Specific people', link: 'Anyone with the link', public: 'Everyone' };
+    const defaultOptions = ['private', 'people', 'link']
+        .map((a) => html`<option value="${a}"${a === defaultAudience ? raw(' selected') : ''}>${audienceText[a]}</option>`);
     return html`<h1>Watches and saved searches</h1>
 <p class="lede">A watch tells you once when a new observation matches it (at most one notification per observation). A saved search never notifies. Notifications are delivered by the OpenVibe network; Deals never emails.</p>
 ${error ? html`<p class="notice error" role="alert">${error}</p>` : ''}
 ${notice ? html`<p class="notice" role="status">${notice}</p>` : ''}
-${watches.length ? html`<ul class="watches">${watches.map((w) => html`<li><strong>${w.kind === 'search' ? 'Saved search' : w.kind === 'price_below' ? 'Price below' : w.kind === 'product' ? 'Product' : 'Keywords'}</strong>:
+<section class="card" aria-labelledby="new-watch-h">
+<h2 id="new-watch-h">New watches</h2>
+<form method="post" action="/watches/defaults" class="inline">${csrfField(csrf)}
+<label>Who can open a new watch <select name="audience">${defaultOptions}</select></label>
+<label><input type="checkbox" name="apply_all" value="1"> Apply to all my existing watches</label>
+<button type="submit">Save</button></form>
+<p class="muted">A watch's Share button changes just that one. Your watches are never listed; a shared watch is readable only by whoever holds the link or the people you add.</p></section>
+${watches.length ? html`<ul class="watches">${watches.map((w) => html`<li><strong><a href="/watches/${w.id}">${w.kind === 'search' ? 'Saved search' : w.kind === 'price_below' ? 'Price below' : w.kind === 'product' ? 'Product' : 'Keywords'}</a></strong>:
 ${w.query ? html` “${w.query}”` : ''}${w.product ? html` <a href="${w.product.url}">${w.product.name}</a>` : ''}${w.max_price ? html` under ${w.max_price} ${w.currency}` : ''}
 ${w.kind === 'search' ? html` · <a href="/search?q=${encodeURIComponent(w.query)}">run</a>` : html` · ${w.notifications} notifications`}
+<button type="button" class="btn btn-quiet" data-ov-share-sheet data-kind="watch" data-id="${w.id}" data-title="${w.kind === 'search' ? 'Saved search' : 'Watch'}">Share</button>
 <form class="inline" method="post" action="/watches/${w.id}/delete">${csrfField(csrf)}<button type="submit">Delete</button></form></li>`)}</ul>` : html`<p class="empty">No watches yet.</p>`}
 <form method="post" action="/watches" class="card">${csrfField(csrf)}
 <h2>${values.query ? html`Alert me about “${values.query}”` : 'Add'}</h2>
@@ -399,6 +410,37 @@ ${w.kind === 'search' ? html` · <a href="/search?q=${encodeURIComponent(w.query
 <label for="w-cur">Currency</label><input id="w-cur" name="currency" maxlength="3" placeholder="USD">
 <button type="submit">Save</button>
 </form>`;
+}
+
+// ── One watch (its owner's, or a shared one) ────────────────────────────────
+
+const WATCH_AUDIENCES = { public: 'Everyone', link: 'Anyone with the link', people: 'Specific people', private: 'Only me' };
+
+function watchSummary(w) {
+    return html`<strong>${w.kind === 'search' ? 'Saved search' : w.kind === 'price_below' ? 'Price below' : w.kind === 'product' ? 'Product' : 'Keywords'}</strong>:
+${w.query ? html` “${w.query}”` : ''}${w.product ? html` <a href="${w.product.url}">${w.product.name}</a>` : ''}${w.max_price ? html` under ${w.max_price} ${w.currency}` : ''}`;
+}
+
+function watchPage({ watch, mine = false, audience = 'private', csrf, urls, notice }) {
+    const who = WATCH_AUDIENCES[audience] || 'Only me';
+    return html`<h1>${watch.kind === 'search' ? 'Saved search' : 'Watch'}</h1>
+<p class="muted"><span class="badge">${who}</span>${mine ? '' : ' · you are reading a shared watch'}</p>
+${notice ? html`<p class="notice" role="status">${notice}</p>` : ''}
+${mine ? html`<p><button type="button" class="btn" data-ov-share-sheet data-kind="watch" data-id="${watch.id}" data-title="${watch.kind === 'search' ? 'Saved search' : 'Watch'}">Share</button></p>` : ''}
+<p>${watchSummary(watch)}</p>
+<p class="muted">${watch.kind === 'search' ? html`A saved search never notifies. <a href="/search?q=${encodeURIComponent(watch.query)}">Run it</a>.` : html`${watch.notifications} notification${watch.notifications === 1 ? '' : 's'} so far.`} Made ${when(watch.created_at)}.</p>
+${mine ? html`<form class="inline" method="post" action="/watches/${watch.id}/delete">${csrfField(csrf)}<button type="submit">Delete this watch</button></form>` : ''}
+<p class="muted"><a href="/watches">Your watches</a> · Notifications are delivered by the OpenVibe network; Deals never emails.</p>`;
+}
+
+/**
+ * The page a person not on a Specific-people watch's list sees: the audience, never what the watch looks for.
+ * openvibe-shared draws the card from this markup (no inline script).
+ */
+function watchGate({ id, signedInAs = '', signInUrl = '/auth/login' }) {
+    return html`<h1>A watch shared with specific people</h1>
+<p>Sign in with the OpenVibe account it was shared with, or ask its owner for access.</p>
+<div id="watch-share-gate" data-ov-share-gate data-kind="watch" data-id="${id}" data-signed-in-as="${signedInAs}" data-sign-in-url="${signInUrl}">This is shared with specific people. Sign in with the OpenVibe account it was shared with, or ask its owner for access.</div>`;
 }
 
 function searchPage({ q, results, pager, urls, csrf, signedIn }) {
@@ -496,4 +538,4 @@ function message({ heading, text, action }) {
     return html`<h1>${heading}</h1><p>${text}</p>${action ? html`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}`;
 }
 
-module.exports = { storesPage, offerList, tabs, offerPage, productPage, submitForm, watchesPage, searchPage, modPage, storePage, sellerPage, sellersPage, categoryPage, categoriesPage, message, priceText, when, ago };
+module.exports = { storesPage, offerList, tabs, offerPage, productPage, submitForm, watchesPage, watchPage, watchGate, searchPage, modPage, storePage, sellerPage, sellersPage, categoryPage, categoriesPage, message, priceText, when, ago };
