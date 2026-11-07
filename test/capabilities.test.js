@@ -17,7 +17,9 @@ const GRANTED = { cap: ['deals.offer.submit'], sub: 'svc:community' };
     await check('every guarded capability is defined by the installed contracts and the deals manifest', async () => {
         const manifest = services.get('deals');
         assert.ok(manifest, 'openvibe-contracts defines the deals service manifest');
-        assert.deepStrictEqual([...manifest.capabilities].sort(), Object.values(CAPABILITIES).sort());
+        // deals.config.manage is the owner-settings capability, not one of the product proposals in CAPABILITIES;
+        // the service manifest lists it beside them.
+        assert.deepStrictEqual([...manifest.capabilities].sort(), [...Object.values(CAPABILITIES), 'deals.config.manage'].sort());
         for (const id of Object.values(CAPABILITIES)) {
             const cap = capabilities.get(id);
             assert.ok(cap, `${id} is defined by openvibe-contracts`);
