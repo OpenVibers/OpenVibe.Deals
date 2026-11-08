@@ -73,67 +73,30 @@ function createReads({ store }) {
     }
 
     /**
-     * One per-offer read per page, not per offer. Everything that renders a list (a page of 25, forty cards, a product's
-     * offers, the sitemap's eight-entry waves) asks latestObservation/lastSnapshot once per offer; the calls made in the
-     * same turn share one statement. On 2026-11-08 the two reads were 2.1 M and 3.5 M calls a day (324 s and 251 s of DB
-     * time, pg_stat_statements) because each page repeated them per offer. Inside a transaction the read stays direct:
-     * a batch belongs to the caller's turn and must never run on another caller's connection.
+     * The latest observation of each offer in one query, then the group's newest of those (the old LIMIT 1 read, one
+     * query per offer). `lists` is one merge group per page entry; the answer is aligned with it.
      */
-    function coalesce(readOne, load, keyOf, answer) {
-        if (!db.inTransaction || typeof db.inTransaction !== 'function') return readOne;
-        let pending = null;
-        let scheduled = false;
-        const flush = async () => {
-            scheduled = false;
-            const batch = pending; pending = null;
-            try {
-                const rows = await load([...batch.values()].map((w) => w.arg));
-                for (const w of batch.values()) w.resolve(answer(w.arg, rows));
-            } catch (err) {
-                for (const w of batch.values()) w.reject(err);
-            }
-        };
-        return (arg) => {
-            if (db.inTransaction()) return readOne(arg);
-            const key = keyOf(arg);
-            if (!pending) pending = new Map();
-            const hit = pending.get(key);
-            if (hit) return hit.promise;
-            let w;
-            const promise = new Promise((resolve, reject) => { w = { arg, resolve, reject, promise: null }; });
-            w.promise = promise;
-            pending.set(key, w);
-            if (!scheduled) { scheduled = true; setImmediate(flush); }
-            return promise;
-        };
+    const pickLatest = (ids, byOffer) => {
+        let best = null;
+        for (const id of ids) {
+            const o = byOffer.get(id);
+            if (o && (!best || o.observed_at > best.observed_at || (o.observed_at === best.observed_at && o.seq > best.seq))) best = o;
+        }
+        return best || null;
+    };
+    async function latestObservations(lists) {
+        const ids = [...new Set(lists.flat())];
+        if (!ids.length) return lists.map(() => null);
+        const byOffer = new Map((await q.latestByOffer.all(J(ids))).map((o) => [o.offer_id, o]));
+        return lists.map((list) => pickLatest(list, byOffer));
     }
 
-    /** The latest observation of each offer in one query, then the group's newest of those (the old LIMIT 1 read). */
-    const latestObservation = coalesce(
-        async (ids) => await q.latest.get(J(ids)) || null,
-        async (lists) => {
-            const ids = [...new Set(lists.flat())];
-            if (!ids.length) return new Map();
-            return new Map((await q.latestByOffer.all(J(ids))).map((o) => [o.offer_id, o]));
-        },
-        (ids) => JSON.stringify(ids),
-        (ids, byOffer) => {
-            let best = null;
-            for (const id of ids) {
-                const o = byOffer.get(id);
-                if (o && (!best || o.observed_at > best.observed_at || (o.observed_at === best.observed_at && o.seq > best.seq))) best = o;
-            }
-            return best || null;
-        },
-    );
-
-    /** Each root's latest snapshot in one query. A group shares its root's snapshots, exactly as before. */
-    const lastSnapshot = coalesce(
-        async (id) => await q.lastSnapshot.get(id) || null,
-        async (ids) => new Map((await q.lastSnapshots.all(J([...new Set(ids)]))).map((s) => [s.offer_id, s])),
-        (id) => String(id),
-        (id, byOffer) => byOffer.get(id) || null,
-    );
+    /** Each root's latest snapshot in one query, keyed by offer id. */
+    async function lastSnapshots(ids) {
+        const unique = [...new Set(ids)];
+        if (!unique.length) return new Map();
+        return new Map((await q.lastSnapshots.all(J(unique))).map((s) => [s.offer_id, s]));
+    }
 
     async function tally(ids) {
         let up = 0, down = 0, upW = 0, downW = 0;
@@ -155,8 +118,10 @@ function createReads({ store }) {
         effectiveVotes,
         tally,
         mergedMembers: async (id) => await q.members.all(id),
-        latestObservation,
-        lastSnapshot,
+        latestObservation: async (ids) => await q.latest.get(J(ids)) || null,
+        latestObservations,
+        lastSnapshot: async (id) => await q.lastSnapshot.get(id) || null,
+        lastSnapshots,
     };
 }
 

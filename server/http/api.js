@@ -83,7 +83,7 @@ function createApi(ctx) {
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
         const per = 25;
         const rows = req.query.sort === 'new' ? await listings.newest(per, (page - 1) * per) : await listings.hot(per, (page - 1) * per);
-        const views = await Promise.all(rows.map(async (o) => publication.offerView(o)));
+        const views = await publication.offerViews(rows);
         const visible = fromExtension(req) ? views.filter((v) => !v.extensionExcluded) : views;
         return { sort: req.query.sort === 'new' ? 'new' : 'hot', page, total: await listings.countActive(), offers: visible.map((v) => publication.offerDto(v)) };
     }));
@@ -201,7 +201,7 @@ function createApi(ctx) {
     router.get('/stores/:domain', run(async (req) => {
         const st = await catalog.storeByDomain(req.params.domain);
         if (!st) throw new ApiError(404, 'store.not_found', 'No such store');
-        const views = await Promise.all((await listings.byStore(st.id, 50, 0)).map(async (o) => await publication.offerView(o)));
+        const views = await publication.offerViews(await listings.byStore(st.id, 50, 0));
         const offers = fromExtension(req) ? views.filter((v) => !v.extensionExcluded) : views;
         return { store: { id: st.id, domain: st.domain, name: st.name, url: publication.abs(publication.storePath(st)) }, offers: offers.map((v) => publication.offerDto(v)) };
     }));

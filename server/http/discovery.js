@@ -90,7 +90,7 @@ function createDiscoveryRoutes({ config, store, publication, listings }) {
     // and the cache is bounded by the listings' own 50,000-offer and 50,000-product caps.
     const ttl = Number(config.sitemapTtlMs) || 0;
     const offerEntries = shared(async () => {
-        const entries = await mapLimit(await listings.indexable(), VIEWS_PARALLEL, (o) => publication.indexEntry(o));
+        const entries = await publication.indexEntries(await listings.indexable());
         let kept = 0;
         for (const e of entries) {
             if (e.decision.indexable && ++kept <= LLMS_SUMMARIES_MAX) continue;

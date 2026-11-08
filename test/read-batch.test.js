@@ -31,7 +31,7 @@ const { boot, check, done } = require('./helpers/boot');
     };
     let views;
     try {
-        views = await Promise.all(offers.map((o) => t.ctx.publication.offerView(o)));
+        views = await t.ctx.publication.offerViews(offers);
     } finally {
         db.query = query;
     }

@@ -31,6 +31,12 @@ function routes(ttlMs, clock, { offerCount = 20, products = [] } = {}) {
             seen.now--;
             return { loc: `https://deals.test/d/${o.slug}`, lastmod: o.updated_at, decision: indexable, title: o.slug, text: '1 USD' };
         },
+        async indexEntries(offers) {
+            // The real indexEntries prefetches per chunk and reads the page views at most eight at a time.
+            const out = new Array(offers.length);
+            for (let i = 0; i < offers.length; i += 8) await Promise.all(offers.slice(i, i + 8).map(async (o, j) => { out[i + j] = await publication.indexEntry(o); }));
+            return out;
+        },
         async productIndexEntry(p) { return { loc: `https://deals.test/p/${p.slug}`, lastmod: p.updated_at, decision: indexable }; },
     };
     const listings = {
