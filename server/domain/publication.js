@@ -63,12 +63,12 @@ function createPublication({ config, store, reads, catalog }) {
     }
 
     /** Everything a page, the JSON twin, an event or the index needs about one canonical offer. */
-    async function offerView(offer, now = store.now()) {
-        const root = await reads.root(offer);
-        const ids = await reads.groupIds(root.id);
-        const latest = await reads.latestObservation(ids);
+    async function offerView(offer, now = store.now(), pre = null) {
+        const root = pre ? pre.root : await reads.root(offer);
+        const ids = pre ? pre.ids : await reads.groupIds(root.id);
+        const latest = pre ? pre.latest : await reads.latestObservation(ids);
         const tally = await reads.tally(ids);
-        const snap = await reads.lastSnapshot(root.id);
+        const snap = pre ? pre.snap : await reads.lastSnapshot(root.id);
         const sources = await reads.sources(ids);
         const observations = await reads.observations(ids);
         return {
@@ -94,14 +94,49 @@ function createPublication({ config, store, reads, catalog }) {
     }
 
     /**
+     * The page's shared reads: every root, group, latest observation and (for offer views) snapshot, once. A page of 25
+     * offers used to repeat each of those per offer: 2.1 M snapshot lookups and 3.5 M latest-observation lookups a day
+     * on 2026-11-08 (324 s and 251 s of DB time, pg_stat_statements).
+     */
+    async function prefetch(offers, { snapshots = true } = {}) {
+        const roots = await Promise.all(offers.map(async (o) => (o.merged_into ? await reads.root(o) : o)));
+        // A group read per offer, at most eight at once: the pool has a handful of connections for everyone.
+        const groups = new Array(roots.length);
+        for (let i = 0; i < roots.length; i += 8) {
+            await Promise.all(roots.slice(i, i + 8).map(async (r, j) => { groups[i + j] = await reads.groupIds(r.id); }));
+        }
+        const [latest, snaps] = await Promise.all([
+            reads.latestObservations(groups),
+            snapshots ? reads.lastSnapshots(roots.map((r) => r.id)) : Promise.resolve(new Map()),
+        ]);
+        return { roots, groups, latest, snaps };
+    }
+
+    /** A whole page of offer views from one read per fact, each view with its own group's latest and its root's snapshot. */
+    async function offerViews(offers, now = store.now()) {
+        if (!offers.length) return [];
+        const pre = await prefetch(offers);
+        return await Promise.all(offers.map((o, i) => offerView(o, now, {
+            root: pre.roots[i], ids: pre.groups[i], latest: pre.latest[i], snap: pre.snaps.get(pre.roots[i].id) || null,
+        })));
+    }
+
+    /**
      * The little a card needs (the home page's sections): the group's latest observation, its freshness, the store and
      * the attribution a source requires. Four reads instead of offerView's ten, so a page of 40 cards stays quick.
      */
-    async function cardView(offer, now = store.now()) {
-        const root = offer.merged_into ? await reads.root(offer) : offer;
-        const ids = await reads.groupIds(root.id);
-        const latest = await reads.latestObservation(ids);
+    async function cardView(offer, now = store.now(), pre = null) {
+        const root = pre ? pre.root : (offer.merged_into ? await reads.root(offer) : offer);
+        const ids = pre ? pre.ids : await reads.groupIds(root.id);
+        const latest = pre ? pre.latest : await reads.latestObservation(ids);
         return { root, ids, store: await catalog.store(root.store_id), latest, freshness: freshness(latest, now), attribution: attributionOf(await reads.sources(ids)), now };
+    }
+
+    /** A whole home page of cards from one read per fact (no snapshots: a card has no hotness). */
+    async function cardViews(offers, now = store.now()) {
+        if (!offers.length) return [];
+        const pre = await prefetch(offers, { snapshots: false });
+        return await Promise.all(offers.map((o, i) => cardView(o, now, { root: pre.roots[i], ids: pre.groups[i], latest: pre.latest[i] })));
     }
 
     function observationDto(o) {
@@ -206,7 +241,8 @@ function createPublication({ config, store, reads, catalog }) {
      * an old or unknown price never sorts as if it were the price now, and unknown never sorts as 0.
      */
     async function productView(product, now = store.now()) {
-        const rows = await Promise.all((await productOfferIds.all(product.id)).map(async (r) => await offerView(await reads.get(r.id), now)));
+        const offers = await Promise.all((await productOfferIds.all(product.id)).map(async (r) => await reads.get(r.id)));
+        const rows = await offerViews(offers, now);
         const rank = (v) => (v.root.status !== 'active' ? 4 : v.freshness.state !== 'fresh' ? 3 : (v.latest && v.latest.price != null && v.latest.currency) ? 1 : 2);
         rows.sort((a, b) => rank(a) - rank(b)
             || (rank(a) === 1 ? (a.latest.currency < b.latest.currency ? -1 : a.latest.currency > b.latest.currency ? 1 : a.latest.price_num - b.latest.price_num) : 0)
@@ -238,10 +274,10 @@ function createPublication({ config, store, reads, catalog }) {
      * the full views instead cost ~6.7 KB an offer — ~340 MB of a 50,000-offer catalog, held twice over once products
      * were built (2026-11-07: the Deals process at 667 MB-923 MB, peaking at 2 GB).
      */
-    async function indexEntry(offer, now = store.now()) {
-        const root = offer.merged_into ? await reads.root(offer) : offer;
-        const ids = await reads.groupIds(root.id);
-        const latest = await reads.latestObservation(ids);
+    async function indexEntry(offer, now = store.now(), pre = null) {
+        const root = pre ? pre.root : (offer.merged_into ? await reads.root(offer) : offer);
+        const ids = pre ? pre.ids : await reads.groupIds(root.id);
+        const latest = pre ? pre.latest : await reads.latestObservation(ids);
         // listings.indexable() joins the store onto each row; any other caller gets it looked up here.
         const s = root.store_domain !== undefined
             ? (root.store_domain ? { name: root.store_name, domain: root.store_domain } : null)
@@ -254,6 +290,17 @@ function createPublication({ config, store, reads, catalog }) {
             title: root.title,
             text: [brief(root.description), price, s ? `at ${s.name || s.domain}` : ''].filter(Boolean).join(' '),
         };
+    }
+
+    /** The sitemap arrays, prefetched in chunks: one latest-observation read per 100 offers instead of per offer. */
+    async function indexEntries(offers, now = store.now(), { chunk = 100 } = {}) {
+        const out = [];
+        for (let i = 0; i < offers.length; i += chunk) {
+            const part = offers.slice(i, i + chunk);
+            const pre = await prefetch(part, { snapshots: false });
+            out.push(...await Promise.all(part.map((o, j) => indexEntry(o, now, { root: pre.roots[j], ids: pre.groups[j], latest: pre.latest[j] }))));
+        }
+        return out;
     }
 
     // A product's lastmod and freshest active observation in one read: each offer's group latest observation (a merge
@@ -281,7 +328,7 @@ function createPublication({ config, store, reads, catalog }) {
         };
     }
 
-    return { abs, offerPath, productPath, storePath, sellerPath, categoryPath, freshness, decideOffer, decideProduct, offerView, cardView, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd, indexEntry, productIndexEntry };
+    return { abs, offerPath, productPath, storePath, sellerPath, categoryPath, freshness, decideOffer, decideProduct, offerView, offerViews, cardView, cardViews, offerDto, observationDto, offerLd, offerJsonLd, productView, productJsonLd, indexEntry, indexEntries, productIndexEntry };
 }
 
 module.exports = { createPublication };

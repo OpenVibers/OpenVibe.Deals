@@ -142,7 +142,7 @@ function createPages(ctx) {
         const total = await L.count();
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return null;
-        const list = await Promise.all((await L.rows(PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
+        const list = await publication.offerViews(await L.rows(PER_PAGE, pager.offset));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         return {
             agent: true,
@@ -177,9 +177,11 @@ function createPages(ctx) {
             listings.picks(HOME_CARDS * 2, 0), listings.upvoted(HOME_CARDS * 2), listings.newest(HOME_CARDS * 3, 0),
             listings.endingSoon(now, now + 7 * DAY, HOME_CARDS * 2, 0), listings.under(UNDER.amount, UNDER.currency, fresh, HOME_CARDS * 4),
         ]);
-        const viewOf = new Map();
-        for (const o of [...pickRows, ...upRows, ...newRows, ...endRows, ...underRows]) if (!viewOf.has(o.id)) viewOf.set(o.id, publication.cardView(o, now));
-        await Promise.all(viewOf.values());
+        const candidates = [];
+        const candidateIds = new Set();
+        for (const o of [...pickRows, ...upRows, ...newRows, ...endRows, ...underRows]) if (!candidateIds.has(o.id)) { candidateIds.add(o.id); candidates.push(o); }
+        const cards = await publication.cardViews(candidates, now);
+        const viewOf = new Map(candidates.map((o, i) => [o.id, cards[i]]));
         const top = new Set();
         const shown = new Set();
         const take = async (rows, { skip = shown, keep = () => true, into = [top, shown] } = {}) => {
@@ -449,7 +451,7 @@ function createPages(ctx) {
         const total = await listings.countStore(st.id);
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return null;
-        const list = await Promise.all((await listings.byStore(st.id, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
+        const list = await publication.offerViews(await listings.byStore(st.id, PER_PAGE, pager.offset));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         return {
             agent: true,
@@ -491,7 +493,7 @@ function createPages(ctx) {
         const total = await listings.countSeller(hit.seller);
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return null;
-        const list = await Promise.all((await listings.bySeller(hit.seller, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
+        const list = await publication.offerViews(await listings.bySeller(hit.seller, PER_PAGE, pager.offset));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         return {
             agent: true,
@@ -529,7 +531,7 @@ function createPages(ctx) {
         const total = await listings.countCategory(hit.category);
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return null;
-        const list = await Promise.all((await listings.byCategory(hit.category, PER_PAGE, pager.offset)).map(async (o) => await publication.offerView(o)));
+        const list = await publication.offerViews(await listings.byCategory(hit.category, PER_PAGE, pager.offset));
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         return {
             agent: true,
@@ -556,7 +558,7 @@ function createPages(ctx) {
         send(req, res, 200, {
             title: q ? `Search: ${q}` : 'Search deals',
             decision: pageDecision('/search', { indexable: false }),
-            body: views.searchPage({ q, results: await Promise.all(r.rows.map(async (o) => await publication.offerView(o))), pager, urls, csrf: csrf(req), signedIn: signedIn(req) }),
+            body: views.searchPage({ q, results: await publication.offerViews(r.rows), pager, urls, csrf: csrf(req), signedIn: signedIn(req) }),
         });
     }));
 
@@ -706,8 +708,10 @@ function createPages(ctx) {
     // ── feeds (never viewer-dependent) ──────────────────────
 
     async function feedItems() {
-        return Promise.all((await listings.newest(50, 0)).map(async (o) => {
-            const v = await publication.offerView(o);
+        const offers = await listings.newest(50, 0);
+        const pageViews = await publication.offerViews(offers);
+        return offers.map((o, i) => {
+            const v = pageViews[i];
             const price = `${views.priceText(v.latest)}${v.latest ? ` as of ${iso(v.latest.observed_at)}` : ''}`;
             // A source policy may require attribution: carried as text in the summary and as a tag.
             const via = v.attribution ? `Deal via ${v.attribution.text}` : null;
@@ -717,7 +721,7 @@ function createPages(ctx) {
                 tags: via ? [via] : undefined,
                 published: o.created_at, updated: Math.max(o.updated_at, v.latest ? v.latest.observed_at : 0), decision: v.decision,
             };
-        }));
+        });
     }
     const channel = () => ({ title: 'OpenVibe.Deals — new deals', link: publication.abs('/new'), description: 'New deals, each with its source and the time its price was observed.', language: 'en' });
 
