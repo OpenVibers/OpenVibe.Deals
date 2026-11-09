@@ -2,6 +2,9 @@
 
 > Deals submitted and voted on by the community, with source, price and freshness always shown.
 
+**Live site:** https://openvibe.deals · **API docs:** https://openvibe.services · **For AI:** https://openvibe.deals/llms.txt
+**Run it:** `npm ci && npm run dev` (Node 22 or newer) · **Tests:** `npm test`
+
 **Status:** alpha (roadmap Wave 18, Deals). The service runs and its tests pass. It is **public at
 `openvibe.deals` since 2026-10-08** (contracts 0.118.0), with offers from the DealNews daily feed through OpenVibe.Sources. Its capabilities and
 service manifest are registered in openvibe-contracts v0.97.0.

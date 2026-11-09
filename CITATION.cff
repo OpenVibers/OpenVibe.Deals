@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use OpenVibe.Deals in research or a product, cite it as below."
+title: openvibe-deals
+type: software
+authors:
+  - name: OpenVibe
+    alias: OpenVibers
+    website: https://openvibe.network
+repository-code: https://github.com/OpenVibers/OpenVibe.Deals
+url: https://openvibe.deals
+license: AGPL-3.0-only
+abstract: "Community-submitted deals with source, price and freshness always shown, at openvibe.deals."
+keywords:
+  - openvibe
+  - community
+  - deals
+  - ecommerce
+  - price-tracking
