@@ -36,8 +36,8 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         assert.ok(head.includes('<meta charset="utf-8">') && head.includes('<meta name="viewport"'), 'charset and viewport');
         assert.ok(head.includes('property="og:title"') && head.includes('name="twitter:card"'), 'Open Graph and Twitter tags');
         assert.ok(body.includes('<div id="navbar-mount"></div>'), 'the navbar mount');
-        assert.ok(body.includes('<nav aria-label="Site"'), 'the noscript navigation');
-        assert.ok(body.includes('href="/watches"'), 'the site links in the noscript navigation');
+        assert.ok(body.includes('<nav class="openvibe-navbar" aria-label="Site"'), 'the server-rendered navigation');
+        assert.ok(body.includes('href="/watches"'), 'the site links in the server-rendered navigation');
         assert.ok(body.includes('<main id="main" class="page">'), 'the swappable <main>');
         assert.ok(body.includes('id="ov-footer"'), 'the server-rendered footer');
         assert.ok(body.includes('OpenVibeFooter.init(window.__OV_PAGE.footer)'), 'the footer is initialised');
