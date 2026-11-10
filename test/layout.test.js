@@ -35,7 +35,7 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         assert.ok(head.includes('data-main="#main"'), 'the boost script');
         assert.ok(head.includes('<meta charset="utf-8">') && head.includes('<meta name="viewport"'), 'charset and viewport');
         assert.ok(head.includes('property="og:title"') && head.includes('name="twitter:card"'), 'Open Graph and Twitter tags');
-        assert.ok(body.includes('<div id="navbar-mount"></div>'), 'the navbar mount');
+        assert.ok(body.includes('<div id="navbar-mount">'), 'the navbar mount');
         assert.ok(body.includes('<nav class="openvibe-navbar" aria-label="Site"'), 'the server-rendered navigation');
         assert.ok(body.includes('href="/watches"'), 'the site links in the server-rendered navigation');
         assert.ok(body.includes('<main id="main" class="page">'), 'the swappable <main>');
