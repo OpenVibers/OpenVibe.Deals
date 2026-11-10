@@ -36,7 +36,6 @@ button.danger { background: var(--danger, #ef4444); }
 form.inline { display: inline; }
 form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
 .actions form { margin: 10px 0; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.7rem; } body { font-size: 16px; } }
 /* Deals */
 .page { max-width: 900px; }
@@ -70,7 +69,6 @@ form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
 .attribution { margin: 0; font-size: .82rem; color: var(--text-muted, #7386a3); }
 .deal-item .meta { margin: 2px 0 0; font-size: .82rem; }
 @media (max-width: 600px) { .deal-item { padding: 12px; } }
-@media (prefers-reduced-motion: reduce) { .deal-item { transition: none; } }
 .badge.fresh { border-color: var(--success, #22c55e); color: var(--success-text, var(--success, #22c55e)); }
 .badge.stale, .badge.expired { border-color: var(--warning, #f59e0b); color: var(--warning-text, var(--warning, #f59e0b)); }
 .stale-notice { border-color: var(--warning, #f59e0b); }
@@ -191,7 +189,6 @@ code { overflow-wrap: anywhere; }
 .hm-faq p { margin: 0 0 14px; color: var(--text-secondary, #96a7c2); }
 .hm-empty { margin-top: 24px; }
 @media (max-width: 600px) { .hm-search { flex-wrap: wrap; } .hm-search button { width: 100%; } .hm-stats b { font-size: 1.3rem; } .hm-stats a { padding: 12px; } }
-@media (prefers-reduced-motion: reduce) { .hm-card, .hm-stats a { transition: none; } }
 .hm-card .price-none { font-size: .88rem; font-weight: 500; }
 /* Phones (2026-10-29): a taste and a door. Each deal list and the campaigns are one row that scrolls sideways (every card
    is still there), the clouds show ten each (all are a link away), the figures are one strip. */
