@@ -214,7 +214,8 @@ function createPages(ctx) {
             title: 'Today\'s deals, every price with its time',
             description: 'Deals from Amazon, Walmart, Best Buy and more, by shop, category and end date, with price watches and crowdfunding. Every price says when it was seen.',
             // The home page carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
-            summary: SITE_SUMMARY, styles: [showcase.STYLESHEET],
+            // The empty home draws the shared kit's empty state; its look and button are in kit.css, loaded only then.
+            summary: SITE_SUMMARY, styles: [showcase.STYLESHEET, ...(total === 0 ? ['kit.css'] : [])],
             decision: pageDecision('/', { empty: total === 0 }),
             canonical: seo.canonicalUrl(config.baseUrl, '/'),
             feeds: FEEDS,

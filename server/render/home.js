@@ -11,6 +11,7 @@
  */
 const { html, raw } = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
+const kit = require('openvibe-shared/kit');
 const { ago, when, priceText } = require('./views');
 const { remindLink } = require('./remind');
 const { campaignCard } = require('../http/crowdfunding');
@@ -150,7 +151,7 @@ function homePage(d, urls) {
     ];
 
     return html`${hero}
-${d.empty ? html`<p class="empty hm-empty">No deals have been posted yet. <a href="/submit">Submit the first one</a>.</p>` : ''}
+${d.empty ? raw(kit.empty({ icon: 'tag', title: 'No deals yet', text: 'No deal has been posted yet.', action: { href: '/submit', label: 'Post the first deal', icon: 'plus' } })) : ''}
 ${raw(pickBlock({ key: 'deals', label: 'The deals', head: 'The deals', panes: dealPanes }))}
 ${raw(pickBlock({ key: 'browse', label: 'Ways to browse', head: 'Ways to browse', panes: browsePanes }))}
 <details class="hm-fold"><summary>How it works<span>prices, votes, shops, watches</span></summary>${raw(showcase.features({
