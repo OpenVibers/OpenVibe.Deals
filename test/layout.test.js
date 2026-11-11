@@ -44,6 +44,13 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         assert.ok(body.includes('"loginUrl":"/auth/login?next={path}"'), 'the navbar sign-in returns to the current page');
     });
 
+    await check('a signed-out page loads the passkey enhancement, which no signed-in page needs', async () => {
+        const guest = await t.get('/');
+        assert.ok(/<script src="\/js\/passkey-signin\.js\?v=[0-9a-f]+" defer><\/script>/.test(guest.text), 'the feature-detecting script');
+        const signedIn = await t.get('/watches', { as: alice });
+        assert.ok(!signedIn.text.includes('/js/passkey-signin.js'), 'no passkey script once signed in');
+    });
+
     await check('the home page carries the feed links, one title and robots from the decision', async () => {
         const r = await t.get('/');
         const { head } = split(r.text);

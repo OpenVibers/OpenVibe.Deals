@@ -104,7 +104,7 @@ async function createApp(opts = {}) {
         clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
         redirectUri: config.oauth.redirectUri, scope: config.oauth.scope,
         networkUrl: config.networkUrl, networkInternalUrl: config.networkInternalUrl,
-        issuer: config.issuer || config.networkUrl, secureCookies: config.cookies.secure, log,
+        issuer: config.issuer || config.networkUrl, secureCookies: config.cookies.secure, relatedPasskeys: true, log,
     });
     const auth = opts.auth || sso;
     const jwksUrl = `${config.networkInternalUrl}/api/.well-known/jwks`;
