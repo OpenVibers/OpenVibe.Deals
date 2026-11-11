@@ -336,7 +336,7 @@ render time, so the cache stays short); signed-in views, forms, API responses, e
   sitemaps, index-hooks, discussion, ssr, and the shared ingest/publication chassis — the Sources
   client, change cursor and pull loop, signed event consumer, common normalisers, and the publication
   glue Deals' indexing uses), `openvibe-contracts` v0.97.0, `openvibe-shared` v4.33.0
-  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.147.0 (sso, outbox,
+  (Frame, app icon, footer, legal, release, metrics, ready), `openvibe-sdk` v0.150.0 (sso, outbox,
   inbox, webhook signatures v2, service tokens, per-actor limits).
 - **OpenVibe.Network:** SSO (OAuth client `deals`, registered in production), JWKS,
   `identity.subject.resolve`.
@@ -501,7 +501,7 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 
 <!-- versions:start -->
 - openvibe-contracts: v0.406.0
-- openvibe-sdk: v0.147.0
+- openvibe-sdk: v0.150.0
 - openvibe-shared: v4.206.0
 - openvibe-publishing: v1.7.0
 <!-- versions:end -->
