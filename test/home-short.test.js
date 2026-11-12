@@ -20,7 +20,7 @@ const { boot, check, done } = require('./helpers/boot');
         await t.ctx.store.db.prepare("UPDATE deal_offers SET category = 'Kitchen', seller = 'Coffee Shop', staff_pick = true WHERE id = (SELECT id FROM deal_offers ORDER BY seq DESC LIMIT 1)").run();
         await t.ctx.store.db.prepare("UPDATE deal_offers SET category = 'Kitchen', seller = 'Coffee Shop' WHERE id = (SELECT id FROM deal_offers ORDER BY seq ASC LIMIT 1)").run();
 
-        await check('the home is two pick blocks: a link per section, every section in the page and showing', async () => {
+        await check('the home is two pick blocks: tabs on a phone, every section in the page', async () => {
             const r = await t.get('/');
             assert.strictEqual(r.status, 200, r.text);
             const page = r.text;
@@ -29,13 +29,16 @@ const { boot, check, done } = require('./helpers/boot');
                 const next = page.indexOf('<div class="pick" id="pick-', start + 10);
                 const block = page.slice(start, next > 0 ? next : start + 20000);
                 assert.ok(block.startsWith(`<div class="pick" id="pick-${key}">`), `the ${key} block is on the home`);
-                assert.ok(!/<input type="radio"/.test(block), `no radio in the ${key} block`);
-                assert.match(block, /<nav class="pick-row" aria-label="[^"]+">/, `the ${key} chips are a nav of links`);
-                const chips = [...block.matchAll(/<a class="pick-chip" href="#([a-z-]+)">[^<]+<\/a>/g)];
-                assert.ok(chips.length >= 1, `a link per section (${chips.length})`);
-                // Every section is in the page, and every link points at one of them.
+                // Shared pick() (11-12): sections as tabs on a phone (one section alone is simply shown); every one in
+                // the page, and every tab names one of them.
                 const panes = [...block.matchAll(/<div class="pick-pane" id="([a-z-]+)">/g)].map((m) => m[1]);
-                assert.deepStrictEqual(panes, chips.map((m) => m[1]), 'every section is in the page, one per link');
+                assert.ok(panes.length >= 1, `a pane per section (${panes.length})`);
+                if (panes.length > 1) {
+                    assert.match(block, /<div class="ov-parts ov-parts--front" data-parts="\d+">/, `the ${key} sections are tabs on a phone`);
+                    assert.ok(/<input type="radio" class="ov-parts-r"[^>]* checked>/.test(block), `the first ${key} section is open`);
+                    const tabs = [...block.matchAll(/<label for="ovp-[a-z0-9]+-([a-z-]+)">[^<]+(?: <span class="ov-parts-n">[^<]*<\/span>)?<\/label>/g)].map((m) => m[1]);
+                    assert.deepStrictEqual(panes, tabs, 'every section is in the page, one per tab');
+                } else assert.match(block, /<div class="ov-parts is-stacked">/);
             }
             // Nothing was removed: every section of the home is still in the page.
             for (const title of ['Editors', 'Just in', 'Browse by category', 'Shop by store', 'Questions and answers']) {
