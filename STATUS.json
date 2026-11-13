@@ -7,13 +7,13 @@
   "runtime": "node 22, express 4, PostgreSQL 18 (openvibe-sdk/db, async) + Valkey 9",
   "port": 4840,
   "domain": "openvibe.deals",
-  "contracts": "openvibe-contracts v0.417.0",
+  "contracts": "openvibe-contracts v0.419.0",
   "sdk": "openvibe-sdk v0.161.0",
-  "shared": "openvibe-shared v4.228.0",
+  "shared": "openvibe-shared v4.233.0",
   "packages": [
     "openvibe-publishing v1.7.0",
-    "openvibe-contracts v0.417.0",
-    "openvibe-shared v4.228.0",
+    "openvibe-contracts v0.419.0",
+    "openvibe-shared v4.233.0",
     "openvibe-sdk v0.161.0"
   ],
   "capabilities": [
@@ -53,5 +53,5 @@
     "SDK outbox events and Search index documents",
     "per-actor limits (openvibe-sdk/limits)"
   ],
-  "updated": "2026-11-12"
+  "updated": "2026-11-13"
 }
