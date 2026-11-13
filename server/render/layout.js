@@ -33,13 +33,13 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 // The product's own places: the main ones carry an icon (phones get them as the bottom tab bar), the rest fold
 // into the navbar's More (Shared 4.22). Search is the navbar's magnifier; What shipped is the footer's.
 const NAV_LINKS = [
-    { label: 'Hot', href: '/hot', icon: 'fa-bolt' },
-    { label: 'New', href: '/new', icon: 'fa-clock' },
-    { label: 'Categories', href: '/c', icon: 'fa-tag' },
-    { label: 'Shops', href: '/at', icon: 'fa-wallet' },
-    { label: 'Submit', href: '/submit', icon: 'fa-plus' },
-    { label: 'Crowdfunding', href: '/crowdfunding', icon: 'fa-heart', more: true },
-    { label: 'Watches', href: '/watches', icon: 'fa-bell', more: true },
+    { label: 'Hot', href: '/hot', icon: 'zap' },
+    { label: 'New', href: '/new', icon: 'clock' },
+    { label: 'Categories', href: '/c', icon: 'tag' },
+    { label: 'Shops', href: '/at', icon: 'wallet' },
+    { label: 'Submit', href: '/submit', icon: 'plus' },
+    { label: 'Crowdfunding', href: '/crowdfunding', icon: 'heart', more: true },
+    { label: 'Watches', href: '/watches', icon: 'bell', more: true },
 ];
 
 const hashes = new Map();
@@ -81,7 +81,7 @@ function renderPage(o) {
     };
     // This site's own account links live in the shared navbar's account menu (the page's account
     // bar below is only for visitors without JavaScript).
-    if (signedIn) nav.menu = { before: (viewer.staff ? [{ label: 'Moderation', href: '/mod', icon: 'fa-shield' }] : []) };
+    if (signedIn) nav.menu = { before: (viewer.staff ? [{ label: 'Moderation', href: '/mod', icon: 'shield' }] : []) };
     const footer = { service: 'deals', variant: 'auto', path: o.path, mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };   // full on the front page only (Shared 4.19)
     const account = signedIn
         ? `${viewer.staff ? '<a href="/mod">Moderation</a> · ' : ''}<a href="/watches">Watches</a> · <a href="/auth/logout?next=${loginNext}">Sign out</a>`
