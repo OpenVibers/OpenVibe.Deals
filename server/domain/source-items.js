@@ -47,7 +47,7 @@
  */
 const { createChangeCursor, pullChanges } = require('openvibe-publishing/ingest');
 const {
-    normalizeUrl, verbatimUrl, urlKey, parseAmount, SCHEMA_AVAILABILITY, SCHEMA_CONDITION, iso,
+    normalizeUrl, verbatimUrl, urlKey, pictureUrl, parseAmount, SCHEMA_AVAILABILITY, SCHEMA_CONDITION, iso,
 } = require('./values');
 const { keepsLinksVerbatim } = require('./source-policy');
 const { isDeal } = require('./price-trend');
@@ -86,6 +86,18 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
     // is beside it.
     const enabled = () => Boolean(sources.enabled && config.sources.enabled);
     const cursorNow = async () => await cursor.get(CURSOR);
+
+    /**
+     * The picture the source stated for the listing, kept on the offer (the one feed lists a deal with
+     * its picture). It is stored as stated and never fetched; a listing without one keeps none.
+     */
+    async function applyImage(offerId, image) {
+        if (!image) return false;
+        const row = await db.prepare('SELECT image_url FROM deal_offers WHERE id = ?').get(offerId);
+        if (!row || row.image_url === image) return false;
+        await db.prepare('UPDATE deal_offers SET image_url = ?, updated_at = ? WHERE id = ?').run(image, store.now(), offerId);
+        return true;
+    }
 
     function amount(v) { try { return parseAmount(v, 'price'); } catch { return null; } }
     function currencyOf(v) { return typeof v === 'string' && /^[A-Z]{3}$/.test(v) ? v : null; }
@@ -126,7 +138,8 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
         if (item.kind === 'offer') {
             const url = linkOf(f.url || item.canonical_url);
             if (!url || !item.title) return [];
-            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), ...sellerOf(f.seller), ...labels }];
+            // The picture the source stated for the listing, when it stated one (the feed lists it).
+            return [{ part: '', url, title: item.title, description: item.summary, obs: obsFields(f), expires_at: stated(f.valid_until), image: pictureUrl(f.image), ...sellerOf(f.seller), ...labels }];
         }
         if (item.kind === 'product') {
             if (!item.title) return [];
@@ -139,7 +152,8 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 out.push({
                     // A verbatim source's title is used as stated, with no added words.
                     part: urlKey(url), url, title: !verbatim && o.seller ? `${item.title} — ${o.seller}` : item.title, description: item.summary,
-                    obs: obsFields(o), expires_at: stated(o.valid_until), ...sellerOf(o.seller), ...labels,
+                    obs: obsFields(o), expires_at: stated(o.valid_until), image: pictureUrl(f.image || o.image),
+                    ...sellerOf(o.seller), ...labels,
                     product: { name: item.title, brand: f.brand, gtin: f.gtin, mpn: f.mpn, sku: f.sku },
                 });
             }
@@ -206,6 +220,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 const obs = await offers.recordObservation(existing.offer_id, existing.id, c.obs, { origin, observedAt: retrievedAt, sourceRevision: item.revision });
                 const offer = await reads.get(existing.offer_id);
                 const changed = ['observation'];
+                if (await applyImage(existing.offer_id, c.image)) changed.push('image');
                 if (origin === 'import' && c.seller && offer.origin === 'import' && c.seller !== offer.seller) {
                     await db.prepare('UPDATE deal_offers SET seller = ?, updated_at = ? WHERE id = ?').run(c.seller, store.now(), offer.id);
                     changed.push('seller');
@@ -233,6 +248,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 const obs = await offers.recordObservation(dup.id, s.id, c.obs, { origin: 'import', observedAt: retrievedAt, sourceRevision: item.revision });
                 if (productId && !dup.product_id) await db.prepare('UPDATE deal_offers SET product_id = ?, updated_at = ? WHERE id = ?').run(productId, store.now(), dup.id);
                 if (c.seller && !dup.seller) await db.prepare('UPDATE deal_offers SET seller = ?, updated_at = ? WHERE id = ?').run(c.seller, store.now(), dup.id);
+                await applyImage(dup.id, c.image);
                 if (!dup.category || dup.staff_pick == null) await applyLabels(dup, { category: dup.category ? null : c.category, staff_pick: dup.staff_pick == null ? c.staff_pick : null });
                 await indexing.emitOffer('deals.offer.updated', await reads.get(dup.id), { actor: 'svc:deals', extra: { changed: ['sources'], observation_id: obs.id } });
                 await indexing.reindex(await reads.get(dup.id));
@@ -243,6 +259,7 @@ function createImporter({ config, store, reads, catalog, offers, indexing, sourc
                 url: c.url, title: String(c.title).slice(0, 200), description: c.description, product_id: productId, category: c.category,
                 store_name: c.store_name, seller: c.seller, expires_at: c.expires_at != null && c.expires_at > store.now() ? c.expires_at : null,
             }, src, c.obs, { observedAt: retrievedAt, sourceRevision: item.revision });
+            await applyImage(made.id, c.image);
             if (c.staff_pick != null) await applyLabels(made, { staff_pick: c.staff_pick });
             outcomes.push('created');
         }
