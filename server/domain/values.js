@@ -86,6 +86,20 @@ function verbatimUrl(input) {
     return s.length <= 2048 ? s : null;
 }
 
+/**
+ * The picture of a listing, as the source stated it: an https address kept as it is (a picture link
+ * is not the listing's identity, so nothing is stripped from it), and null for anything else.
+ */
+function pictureUrl(input) {
+    if (input == null || input === '') return null;
+    const s = String(input).trim();
+    if (!s || s.length > 2000) return null;
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password) return null;
+    return u.href;
+}
+
 /** The identity used to find duplicates: normalised URL without scheme and without "www.". */
 function urlKey(normalized) {
     if (!normalized) return null;
@@ -94,7 +108,7 @@ function urlKey(normalized) {
 
 module.exports = {
     ApiError, newId, CONDITIONS, AVAILABILITY, AVAILABILITY_LABEL, SCHEMA_AVAILABILITY, SCHEMA_CONDITION,
-    normalizeUrl, urlKey, verbatimUrl,
+    normalizeUrl, urlKey, verbatimUrl, pictureUrl,
     domainOf: normalize.domainOf, slugify: normalize.slugify,
     parseAmount: asApiError(normalize.parseAmount), parseCurrency: asApiError(normalize.parseCurrency),
     parseEnum: asApiError(normalize.parseEnum), parseInstant: asApiError(normalize.parseInstant),

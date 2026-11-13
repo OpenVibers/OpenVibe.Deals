@@ -19,7 +19,7 @@
  * drops the price, a missing availability is omitted (never an assumed InStock).
  */
 const seo = require('openvibe-publishing/seo');
-const { iso } = require('./values');
+const { iso, pictureUrl } = require('./values');
 const { attributionOf, hidesFromExtension } = require('./source-policy');
 const { priceTrend, listPriceFields } = require('./price-trend');
 
@@ -164,6 +164,26 @@ function createPublication({ config, store, reads, catalog }) {
         };
     }
 
+    /**
+     * What the one feed needs about an offer (feed.item@1 1.1.0): what it costs now, what it cost
+     * before, the shop that sells it and its picture. A price without a currency, or a currency that is
+     * not an ISO code, is no price at all; a listing without a picture has none.
+     */
+    function feedFacts(v) {
+        const latest = v.latest;
+        const amount = latest ? Number(latest.price_num != null ? latest.price_num : latest.price) : NaN;
+        const currency = String((latest && latest.currency) || '').trim().toUpperCase();
+        const was = latest && latest.list_price_num != null ? Number(latest.list_price_num) : NaN;
+        const store = (v.store && (v.store.name || v.store.domain)) || v.root.seller || null;
+        const thumb = pictureUrl(v.root.image_url);
+        return {
+            price: Number.isFinite(amount) && amount >= 0 && /^[A-Z]{3}$/.test(currency) ? { amount, currency } : null,
+            was: Number.isFinite(was) && was >= 0 ? was : null,
+            store: store ? String(store).trim().slice(0, 60) || null : null,
+            media: thumb ? { thumb } : null,
+        };
+    }
+
     /** The JSON representation (API and /d/:slug.json): the same facts as the page. */
     function offerDto(v) {
         const r = v.root;
@@ -179,6 +199,9 @@ function createPublication({ config, store, reads, catalog }) {
             store: v.store ? { id: v.store.id, domain: v.store.domain, name: v.store.name, url: abs(storePath(v.store)) } : null,
             // The shop a source says sells it, as stated (the store is where the link goes).
             seller: r.seller || null,
+            // What the one feed lists the offer with: the price now, the price before, the shop and the
+            // product's picture (feed.item@1 1.1.0).
+            feed: feedFacts(v),
             product: v.product ? { id: v.product.id, slug: v.product.slug, name: v.product.name, url: abs(productPath(v.product)) } : null,
             // "latest", never "current": whether it still holds is what freshness says.
             latest_observation: v.latest ? observationDto(v.latest) : null,
