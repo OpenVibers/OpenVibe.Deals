@@ -325,7 +325,7 @@ ${r.status === 'expired' ? html`<form method="post" action="/mod/offers/${r.slug
 ${r.review_state === 'pending' ? html`<form method="post" action="/mod/offers/${r.slug}/review">${csrfField(csrf)}<button type="submit">Mark text reviewed</button></form>` : ''}
 ${v.members.map((m) => html`<form method="post" action="/mod/offers/${m.slug}/unmerge">${csrfField(csrf)}<button type="submit">Unmerge ${m.slug}</button></form>`)}
 ${flags && flags.length ? html`<h3>Flags</h3><ul>${flags.map((f) => html`<li>${f.kind} (${f.origin}, ${f.status})${f.reason ? `: ${f.reason}` : ''}</li>`)}</ul>` : ''}
-${log && log.length ? html`<h3>Moderation log</h3><ol>${log.map((l) => html`<li>${timeEl(l.at)} ${l.action} ${l.offer_id} ${l.target_id ? `→ ${l.target_id}` : ''} by ${l.actor}${l.reason ? `: ${l.reason}` : ''}</li>`)}</ol>` : ''}
+${log && log.length ? html`<h3>Moderation log</h3><ol>${log.map((l) => html`<li>${timeEl(l.at)} ${l.action} ${l.offer_id} ${l.target_id ? ` on ${l.target_id}` : ''} by ${l.actor}${l.reason ? `: ${l.reason}` : ''}</li>`)}</ol>` : ''}
 </details>` : ''}
 <section class="comments" id="comments"><h2>Discussion</h2>
 ${comments(c)}

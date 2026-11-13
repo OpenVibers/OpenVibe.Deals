@@ -11,6 +11,7 @@
  */
 const { html, raw } = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
+const glyphs = require('openvibe-shared/glyphs');
 const kit = require('openvibe-shared/kit');
 const { ago, when, priceText } = require('./views');
 const { remindLink } = require('./remind');
@@ -72,7 +73,7 @@ ${where || via ? html`<p class="meta hm-where">${where}${where && via ? ' · ' :
 function section({ id, title, lede, more, body }) {
     if (!body) return '';
     return html`<section class="hm-sec" aria-labelledby="${id}">
-<div class="hm-head"><h2 id="${id}">${title}</h2>${more ? html`<a class="hm-more" href="${more.href}">${more.label}<span aria-hidden="true"> →</span></a>` : ''}</div>
+<div class="hm-head"><h2 id="${id}">${title}</h2>${more ? html`<a class="hm-more" href="${more.href}">${more.label}<span aria-hidden="true"> ${raw(glyphs.svg('arrow-right', { size: 14 }))}</span></a>` : ''}</div>
 ${lede ? html`<p class="hm-lede">${lede}</p>` : ''}
 ${raw(String(body))}
 </section>`;
