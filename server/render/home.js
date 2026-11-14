@@ -12,6 +12,8 @@
 const { html, raw } = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
 const kit = require('openvibe-shared/kit');
+// Design rule 169: no text arrows; a drawn one.
+const ARROW = require('openvibe-shared/glyphs').svg('arrow-right', { size: 16 });
 const { ago, when, priceText } = require('./views');
 const { remindLink } = require('./remind');
 const { campaignCard } = require('../http/crowdfunding');
@@ -72,7 +74,7 @@ ${where || via ? html`<p class="meta hm-where">${where}${where && via ? ' · ' :
 function section({ id, title, lede, more, body }) {
     if (!body) return '';
     return html`<section class="hm-sec" aria-labelledby="${id}">
-<div class="hm-head"><h2 id="${id}">${title}</h2>${more ? html`<a class="hm-more" href="${more.href}">${more.label}<span aria-hidden="true"> →</span></a>` : ''}</div>
+<div class="hm-head"><h2 id="${id}">${title}</h2>${more ? html`<a class="hm-more" href="${more.href}">${more.label}<span class="sc-go" aria-hidden="true">${raw(ARROW)}</span></a>` : ''}</div>
 ${lede ? html`<p class="hm-lede">${lede}</p>` : ''}
 ${raw(String(body))}
 </section>`;
