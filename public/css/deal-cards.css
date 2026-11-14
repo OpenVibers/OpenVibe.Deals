@@ -48,3 +48,5 @@
     color: var(--on-accent, #fff); background: var(--accent, #3b82f6); white-space: nowrap; }
 .dl-alert:hover { filter: brightness(1.08); }
 @media (max-width: 600px) { .dl-shop { grid-template-columns: auto minmax(0, 1fr); } .dl-alert { grid-column: 1 / -1; justify-content: center; } }
+/* Design rule 201: the intro is one line on a computer, at most two on a phone. */
+@media (max-width: 640px) { .lede { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; } }
