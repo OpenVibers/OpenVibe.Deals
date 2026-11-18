@@ -88,6 +88,19 @@ function createApi(ctx) {
         return { sort: req.query.sort === 'new' ? 'new' : 'hot', page, total: await listings.countActive(), offers: visible.map((v) => publication.offerDto(v)) };
     }));
 
+    // Search as JSON (11-18, plan §L.1: openvibe.markets searches across Deals' offers first): the same words, the same
+    // matching and the same "as of" prices as the /search page. Public, like it; read-limited like every read.
+    router.get('/search', actorLimits.reads('deals.search'), run(async (req) => {
+        const q = String(req.query.q || '').slice(0, 100).trim();
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+        const offset = Math.min(1000, Math.max(0, parseInt(req.query.offset, 10) || 0));
+        if (!q) return { q, total: 0, limit, offset, offers: [] };
+        const r = await listings.search(q, { limit, offset });
+        const views = await publication.offerViews(r.rows);
+        const visible = fromExtension(req) ? views.filter((v) => !v.extensionExcluded) : views;
+        return { q, total: r.total, limit, offset, offers: visible.map((v) => publication.offerDto(v)) };
+    }));
+
     // A removed deal answers like its page (410, reason only); moderators still read the whole record.
     router.get('/offers/:id', run(async (req) => {
         const offer = await reads.mustFind(req.params.id);
