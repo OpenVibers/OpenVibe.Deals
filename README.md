@@ -72,6 +72,7 @@ gauges to `telemetry_samples` every minute and on stop, and deletes rows older t
 | `GET /p/:slug` | a product: **price comparison** across its offers, each with its own latest observation and time (`.json` too) |
 | `GET /s/:domain` | a store's deals |
 | `GET /search?q=` | search (noindex), with "save this search" / "watch these words" |
+| `GET /api/v1/search?q=&limit=&offset=` | the same search as JSON: each offer with its latest observation, a price only "as of" its time (openvibe.markets searches Deals first, plan §L.1) |
 | `GET /crowdfunding?q=&sort=` | crowdfunding discovery: one search opens Kickstarter, Indiegogo, Crowd Supply, Ulule, GoFundMe, Open Collective, Patreon, Wefunder and StartEngine at the words (deep links, nothing read from them), and the campaigns Sources collected (Open Collective) by contributors, newest or most received, amounts "as of" their fetch. Indexable without words; a search is noindex. `/crowdfunding.json` is the same as data (CORS *). |
 | `GET/POST /submit` | submit a deal (signed in) |
 | `GET/POST /watches` | watches and saved searches; `POST /watches/:id/delete` |
