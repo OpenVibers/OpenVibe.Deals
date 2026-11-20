@@ -184,6 +184,8 @@ async function createApp(opts = {}) {
                 styleSrc: ["'self'", "'unsafe-inline'", 'https://openvibe.network', 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
                 fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
                 imgSrc: ["'self'", 'data:', 'https:'],
+                // The feed's preview videos (ov-home.js watchPreview, the menu's Feed): without media-src, default-src 'self' refused them (2026-11-20).
+                mediaSrc: ["'self'", 'blob:', 'https:'],
                 // openvibe.events: release notifications (release-watch's EventSource, openvibe-shared 1.17).
                 // The navbar's Messages count asks Chat (openvibe-shared 4.130.0).
                 connectSrc: ["'self'", 'https://openvibe.chat', 'https://openvibe.network', 'https://openvibe.events', 'https://cloudflareinsights.com'],
