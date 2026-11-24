@@ -11,6 +11,7 @@
  */
 const { html, raw } = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
+const glyphs = require('openvibe-shared/glyphs');
 const kit = require('openvibe-shared/kit');
 // Design rule 169: no text arrows; a drawn one.
 const ARROW = require('openvibe-shared/glyphs').svg('arrow-right', { size: 16 });
