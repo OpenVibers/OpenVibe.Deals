@@ -17,13 +17,13 @@
 .dl-spark circle.lo { fill: var(--success, #22c55e); }
 .dl-spark circle.now { fill: var(--bg-card, #131c2e); stroke: var(--accent, #3b82f6); stroke-width: 1.8; }
 .dl-spark circle.now.at-low { stroke: var(--success, #22c55e); }
-.dl-spark figcaption { font-size: .7rem; color: var(--text-muted, #7386a3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dl-spark figcaption { font-size: .75rem; color: var(--text-muted, #7386a3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dl-vote { margin: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
 .dl-useful { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border, #1f2d47); font-size: .78rem; font-weight: 700;
     color: var(--text-secondary, #96a7c2); text-decoration: none; white-space: nowrap; }
 .dl-useful.has { color: var(--success-text, var(--success, #22c55e)); border-color: color-mix(in srgb, var(--success, #22c55e) 40%, var(--border, #1f2d47)); }
 .dl-useful:hover { border-color: var(--accent, #3b82f6); }
-.dl-band { padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
+.dl-band { padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
 /* Half the hue, half the theme's text: it held on dark themes only (Daylight contrast probe, 2026-11-01). */
 .dl-band--pick { color: color-mix(in srgb, #f5b301 55%, var(--text-primary, #e8eef8)); background: color-mix(in srgb, #f5b301 16%, transparent); }
 /* On light themes that mix lands on #926e15 (4.24:1 on the band). A deeper gold reads 5.7:1; dark themes keep the
